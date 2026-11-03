@@ -33,8 +33,8 @@ class PrefixCheckTests(SimpleTestCase):
         self.assertIn("JWT_3RD_PREFIX = ''", warning.hint)
         self.assertIn("<your site>/auth/microsoft/callback", warning.hint)
 
-    def test_a_missing_prefix_is_left_to_the_urls_error(self):
-        """urls.py already stops start-up with an ImproperlyConfigured that names the setting."""
+    def test_a_missing_prefix_is_fine(self):
+        """Not set means the default "api"."""
         with override_settings():
             del settings.JWT_3RD_PREFIX
             self.assertEqual(check_jwt_3rd_prefix(None), [])
