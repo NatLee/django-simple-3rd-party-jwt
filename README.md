@@ -310,7 +310,33 @@ If the domain is not allowed, it says so in red and stores nothing.
 | The callback page says "Sorry, this account is not allowed to sign in here." | The address's domain is not in `VALID_REGISTER_DOMAINS`. |
 | The callback page says "Sorry, Microsoft has not confirmed an e-mail address for this account." | A work or school account: switch on the optional claims `email` and `xms_edov` (see [Getting credentials](#getting-credentials)). Or the account has no e-mail address, such as one that signs in with a phone number. |
 | Warning `django_simple_third_party_jwt.W002` at start-up, or the page "Microsoft sign-in is not set up on this site." | Set `SOCIAL_MICROSOFT_CLIENT_ID` and `SOCIAL_MICROSOFT_CLIENT_SECRET`. Only using Google? Silence the warning with `SILENCED_SYSTEM_CHECKS`. |
-| The Google endpoint answers `401` "Another account already uses this e-mail address." (or the Microsoft page says so) | Your user model logs in with the e-mail address, and a user who did not sign in through Google or Microsoft already has it. The app does not merge the two. |
+| The Google endpoint answers `401` "Another account already uses this e-mail address. …" (or the Microsoft page says so) | Your user model logs in with the e-mail address, and a user who never signed in through Google or Microsoft already has it. The app does not merge accounts by address. If the sign-in really is that user's, [link it by hand](#linking-a-sign-in-to-an-existing-account). |
+
+### Linking a sign-in to an existing account
+
+When your user model logs in with the e-mail address, a Google or Microsoft sign-in whose
+address another user already has is refused. The person sees "Another account already uses
+this e-mail address. Sign in to that account the usual way, or ask the site's administrator to
+link your Google or Microsoft sign-in to it." The server log says which sign-in collided with
+which user, for example:
+
+```text
+[AUTH][GOOGLE] Not signing in google account [109876543210987654321]: its address `alice@example.com`
+belongs to user pk=42 (alice@example.com), who is not linked to it. To link them, add a SocialAccount
+for that user with provider 'google' and unique ID '109876543210987654321' ...
+```
+
+Make sure the sign-in belongs to that person (for example, they asked you), because linking it
+gives them that account. Then:
+
+1. In the Django admin, open the `SocialAccount` list (shown as *第三方登入（3rd party login）*)
+   and choose **Add**.
+2. **User**: the user from the log (`pk=42` above). **Provider**: `google` or `microsoft`.
+   **Unique ID**: the ID in square brackets in the log. For Google that is the account's `sub`,
+   for Microsoft `<tenant ID>/<object ID>`.
+3. Save. The next time the person signs in with that Google or Microsoft account, they land in
+   the existing user. The unique ID cannot be edited after saving; delete the row and add a new
+   one to correct it.
 
 ## Upgrading
 
@@ -323,7 +349,8 @@ Check these first if you use Microsoft sign-in:
   accounts: on their first sign-in after the upgrade, the app finds their record through the
   verified e-mail address (the old records were keyed by that address) and keys it by the IDs
   from then on. A user whose verified address differs from their old `preferred_username` gets
-  a new account instead; you can move their `SocialAccount` row in the admin.
+  a new account instead; move their `SocialAccount` row in the admin, or delete it and
+  [link the sign-in by hand](#linking-a-sign-in-to-an-existing-account).
 - **The allowed domain is checked on an e-mail address Microsoft vouches for.** Personal
   accounts work as they are. For work and school accounts, switch on the optional claims
   `email` and `xms_edov` (*Token configuration* in the app registration); without them those
