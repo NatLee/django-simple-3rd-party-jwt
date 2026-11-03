@@ -256,6 +256,15 @@ class MicrosoftLoginTests(TestCase):
         self.assertEqual(response.context["description"], "You are not allowed to access this! :(")
         self.assertFalse(User.objects.exists())
 
+    def test_callback_refuses_a_username_that_is_not_an_email(self):
+        """Some Microsoft accounts sign in with a name that has no "@"; that used to be a 500."""
+        response = self.callback(email="no-at-sign")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["access_token"], "")
+        self.assertEqual(response.context["description"], "You are not allowed to access this! :(")
+        self.assertFalse(User.objects.exists())
+
     def test_callback_shows_error_when_microsoft_rejects_the_code(self):
         with mock.patch(f"{MICROSOFT_AUTH}.get_token_from_code", return_value={"error": "invalid_grant"}):
             response = self.client.get("/api/auth/microsoft/callback", {"code": "bad"})

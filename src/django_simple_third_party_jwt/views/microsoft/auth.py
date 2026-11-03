@@ -56,7 +56,12 @@ def callback(request: HttpRequest) -> HttpResponse:
     # The Graph profile is fetched but not stored (yet).
     get_user(access_token)
 
-    username, domain = split_email(email)
+    try:
+        username, domain = split_email(email)
+    except ValueError:
+        # preferred_username is not always an e-mail (it can be a phone number, for one).
+        logger.warning("[AUTH][MICROSOFT] `%s` is not an e-mail address", email)
+        return render_error(request, email)
     if domain not in jwt_settings.VALID_REGISTER_DOMAINS:
         logger.warning("[AUTH][MICROSOFT] `%s` attempts to register!!", email)
         return render_error(request, email)
