@@ -1,5 +1,6 @@
 
-SECRET_KEY = 'test'
+# At least 32 bytes, so PyJWT does not warn about a short HMAC key.
+SECRET_KEY = 'test-secret-key-used-only-by-the-test-suite'
 DEBUG = True
 USE_TZ = True
 
@@ -68,3 +69,11 @@ SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 SOCIAL_GOOGLE_CLIENT_ID = "376808175534-d6mefo6b1kqih3grjjose2euree2g3cs.apps.googleusercontent.com"
 LOGIN_REDIRECT_URL = "/"
 VALID_REGISTER_DOMAINS = ["gmail.com"]
+
+# Routes are served at /<JWT_3RD_PREFIX>/auth/..., as described in the README.
+JWT_3RD_PREFIX = "api"
+
+# Placeholder Microsoft app credentials: the tests mock every call to Microsoft,
+# so no real client ID or secret is needed.
+SOCIAL_MICROSOFT_CLIENT_ID = "test-microsoft-client-id"
+SOCIAL_MICROSOFT_CLIENT_SECRET = "test-placeholder-not-a-secret"
