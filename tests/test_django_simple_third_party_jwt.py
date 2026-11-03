@@ -78,8 +78,9 @@ class SocialAccountAdminTest(TestCase):
         self.assertEqual(list(self.admin.list_filter), ['provider'])
 
     def test_readonly_fields(self):
-        """測試管理界面的只讀字段"""
-        self.assertEqual(list(self.admin.readonly_fields), ['unique_id'])
+        """unique_id 新增時可以填（管理員手動連結帳號用），存好之後唯讀"""
+        self.assertEqual(list(self.admin.get_readonly_fields(None)), [])
+        self.assertEqual(list(self.admin.get_readonly_fields(None, self.social_account)), ['unique_id'])
 
     def test_user_email_method(self):
         """測試自定義的 user_email 方法"""

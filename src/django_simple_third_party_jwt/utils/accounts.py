@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.core.exceptions import FieldDoesNotExist
 
-from django_simple_third_party_jwt.exception import LoginRefused
+from django_simple_third_party_jwt.exception import EmailTakenError
 from django_simple_third_party_jwt.models import SocialAccount
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ def get_or_create_social_user(
 
     A new user gets `username` (the e-mail's local part) as its USERNAME_FIELD, or a random
     UUID when that name is already taken. When the model's username *is* the e-mail address,
-    it gets the address, and a taken address refuses the login (LoginRefused). Extra keyword
+    it gets the address, and a taken address refuses the login (EmailTakenError). Extra keyword
     arguments (first_name, ...) are set when the model has such a field.
 
     `previous_ids` are IDs the provider's accounts were linked under before; a record found
@@ -72,10 +72,17 @@ def get_or_create_social_user(
     email_field = user_model.get_email_field_name()
     if username_field == email_field:
         username = email
-    if user_model._default_manager.filter(**{username_field: username}).exists():
+    existing = user_model._default_manager.filter(**{username_field: username}).first()
+    if existing is not None:
         if username_field == email_field:
-            logger.warning("%s `%s` already belongs to another user", tag, email)
-            raise LoginRefused("Another account already uses this e-mail address.")
+            # For the administrator only: the client gets EmailTakenError's reason, not these details.
+            logger.warning(
+                "%s Not signing in %s account [%s]: its address `%s` belongs to user pk=%s (%s), who is "
+                "not linked to it. To link them, add a SocialAccount for that user with provider %r and "
+                "unique ID %r (README: Linking a sign-in to an existing account).",
+                tag, provider, unique_id, email, existing.pk, existing.get_username(), provider, unique_id,
+            )
+            raise EmailTakenError
         logger.debug("%s Existing username: [%s]", tag, username)
         username = str(uuid.uuid4())
         logger.debug("%s Creating new username: [%s]", tag, username)

@@ -23,8 +23,11 @@ class SocialAccountAdmin(admin.ModelAdmin):
     list_filter = ("provider",)
     list_per_page = 25
     search_fields = _user_search_fields + ["provider", "unique_id"]
-    # 只讀字段（在編輯頁面中不可修改）
-    readonly_fields = ("unique_id",)
+
+    def get_readonly_fields(self, request, obj=None):
+        # 新增時可以填 unique_id，管理員才能把社群登入手動連到既有使用者（README 有步驟）；
+        # 存好之後就不能改。
+        return () if obj is None else ("unique_id",)
 
     @admin.display(description="使用者Email")
     def user_email(self, obj: SocialAccount) -> str:
