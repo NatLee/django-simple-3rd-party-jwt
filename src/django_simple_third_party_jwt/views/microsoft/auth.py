@@ -47,6 +47,13 @@ def callback(request: HttpRequest) -> HttpResponse:
     """Where Microsoft sends the browser back to after sign-in."""
     try:
         result = get_token_from_code(request)
+        if "error" in result:
+            # Microsoft said no (for example AADSTS7000215, a wrong client secret): log its reason.
+            logger.error(
+                "[AUTH][MICROSOFT] Microsoft refused the sign-in: %s: %s",
+                result["error"], result.get("error_description", ""),
+            )
+            return render_error(request, "")
         access_token = result["access_token"]
         email = result["id_token_claims"]["preferred_username"]
     except Exception as e:
