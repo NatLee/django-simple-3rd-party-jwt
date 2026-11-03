@@ -67,9 +67,10 @@ class GoogleLoginTests(TestCase):
         # Both the package's own keys and Simple JWT's keys are returned,
         # and every access token belongs to the new user.
         self.assertEqual(set(body), {"access", "refresh", "access_token", "refresh_token"})
+        # The Simple JWT names are aliases: one pair of tokens, two sets of keys.
         self.assertEqual(body["refresh"], body["refresh_token"])
-        for key in ("access", "access_token"):
-            self.assertEqual(str(AccessToken(body[key])["user_id"]), str(user.id))
+        self.assertEqual(body["access"], body["access_token"])
+        self.assertEqual(str(AccessToken(body["access"])["user_id"]), str(user.id))
 
     @mock.patch(GOOGLE_VERIFY, return_value=google_idinfo())
     def test_returning_user_is_matched_by_google_id(self, verify):
