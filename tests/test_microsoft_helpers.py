@@ -34,9 +34,18 @@ class MsalAppTests(SimpleTestCase):
     def test_sign_in_flow_asks_for_user_read_and_comes_back_to_the_callback(self, app):
         app.return_value.initiate_auth_code_flow.return_value = {"auth_uri": "https://login"}
 
-        flow = msal_helpers.get_sign_in_flow("http://testserver/")
+        flow = msal_helpers.get_sign_in_flow(redirect_uri="http://testserver/sub/api/auth/microsoft/callback")
 
         self.assertEqual(flow, {"auth_uri": "https://login"})
+        app.return_value.initiate_auth_code_flow.assert_called_once_with(
+            ["user.read"], redirect_uri="http://testserver/sub/api/auth/microsoft/callback"
+        )
+
+    @mock.patch(APP)
+    def test_sign_in_flow_still_takes_the_site_root_like_0_3(self, app):
+        """Compatibility: code written against 0.3.x passes the site root (see msal_helpers)."""
+        msal_helpers.get_sign_in_flow("http://testserver/")
+
         app.return_value.initiate_auth_code_flow.assert_called_once_with(
             ["user.read"], redirect_uri="http://testserver/api/auth/microsoft/callback"
         )

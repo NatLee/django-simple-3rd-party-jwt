@@ -8,6 +8,7 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.test.utils import override_script_prefix
 from django.urls import reverse
 from django.utils.html import escapejs
 from rest_framework_simplejwt.tokens import AccessToken
@@ -186,8 +187,20 @@ class MicrosoftLoginTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], flow["auth_uri"])
-        get_flow.assert_called_once_with("http://testserver/")
+        get_flow.assert_called_once_with(redirect_uri="http://testserver/api/auth/microsoft/callback")
         self.assertEqual(self.client.session["auth_flow"], flow)
+
+    def test_sign_in_sends_microsoft_back_to_wherever_the_callback_is_served(self):
+        """The redirect URI is the callback route's own URL. It used to be the site root plus a
+        path rebuilt from JWT_3RD_PREFIX, which left out a SCRIPT_NAME (a site served under a
+        sub-path) and so sent Microsoft to a URL outside the site."""
+        flow = {"auth_uri": "https://login.microsoftonline.com/x", "state": "s"}
+        # What Django's WSGI handler does for a site whose SCRIPT_NAME is /sub.
+        with override_script_prefix("/sub/"):
+            with mock.patch(f"{MICROSOFT_AUTH}.get_sign_in_flow", return_value=flow) as get_flow:
+                self.client.get("/api/auth/microsoft/signin")
+
+        get_flow.assert_called_once_with(redirect_uri="http://testserver/sub/api/auth/microsoft/callback")
 
     def callback(self, email="carol@gmail.com"):
         token_result = {"access_token": "graph-token", "id_token_claims": {"preferred_username": email}}

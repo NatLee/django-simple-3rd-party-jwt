@@ -190,15 +190,11 @@ VALID_REGISTER_DOMAINS = ['gmail.com', 'outlook.com', 'hotmail.com', 'live.com']
 
 # =====================
 # Credentials: put your own in the environment (see "Getting credentials" in the README).
-# Without them the example uses the package's shared demo apps and logs a warning.
-# Google (client IDs are public, they end up in every login page anyway)
-SOCIAL_GOOGLE_CLIENT_ID = os.environ.get("SOCIAL_GOOGLE_CLIENT_ID", "376808175534-d6mefo6b1kqih3grjjose2euree2g3cs.apps.googleusercontent.com")
-# =====================
-# Microsoft
-SOCIAL_MICROSOFT_CLIENT_ID = os.environ.get("SOCIAL_MICROSOFT_CLIENT_ID", '32346173-22bc-43b2-b6ed-f88f6a76e38c')
-# The secret is never written here: set SOCIAL_MICROSOFT_CLIENT_SECRET in the environment.
-if os.environ.get("SOCIAL_MICROSOFT_CLIENT_SECRET"):
-    SOCIAL_MICROSOFT_CLIENT_SECRET = os.environ["SOCIAL_MICROSOFT_CLIENT_SECRET"]
+# Each one that is not set falls back to the package's shared demo app, with a start-up warning.
+# None of them is written here, so there is no second copy of the demo values to keep in step.
+for _name in ("SOCIAL_GOOGLE_CLIENT_ID", "SOCIAL_MICROSOFT_CLIENT_ID", "SOCIAL_MICROSOFT_CLIENT_SECRET"):
+    if os.environ.get(_name):
+        globals()[_name] = os.environ[_name]
 
 MICROSOFT_JWT_REDIRECT_ACCESS_TOKEN_KEY = 'access_token'
 MICROSOFT_JWT_REDIRECT_REFRESH_TOKEN_KEY = 'refresh_token'

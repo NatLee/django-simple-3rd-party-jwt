@@ -16,8 +16,12 @@ settings = {
     "scopes": ["user.read"],
 }
 
-# Where Microsoft sends the browser back to, relative to the site root.
-# It has to match a redirect URI registered for the app in Azure.
+# Compatibility with 0.3.x, kept in this one place; remove both in 1.0:
+# - `callback_url`: the callback path rebuilt from JWT_3RD_PREFIX, relative to the site root.
+#   Also importable from views.microsoft.utils, its 0.3.0 home. The package itself asks the
+#   URLconf instead (sign_in reverses "microsoft-callback"), which also covers a site served
+#   under a sub-path or an app included somewhere other than the root.
+# - `get_sign_in_flow(root_url)`: the 0.3.x call, which adds `callback_url` to the site root.
 callback_url = jwt_settings.auth_route(jwt_settings.JWT_3RD_PREFIX, "microsoft/callback")
 
 
@@ -43,11 +47,15 @@ def get_msal_app(cache: Optional[msal.SerializableTokenCache] = None) -> msal.Co
     )
 
 
-def get_sign_in_flow(root_url: str) -> Dict[str, Any]:
-    """Start the auth-code flow; `root_url` is the site root, ending in "/"."""
+def get_sign_in_flow(root_url: str = "", *, redirect_uri: Optional[str] = None) -> Dict[str, Any]:
+    """Start the auth-code flow; Microsoft sends the browser back to `redirect_uri`.
+
+    It has to match a redirect URI registered for the app in Azure. `root_url` (the site
+    root, ending in "/") is the 0.3.x way of calling this; see the compatibility note above.
+    """
     return get_msal_app().initiate_auth_code_flow(
         settings["scopes"],
-        redirect_uri=root_url + callback_url,
+        redirect_uri=redirect_uri or root_url + callback_url,
     )
 
 
