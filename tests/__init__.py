@@ -1,6 +1,5 @@
 import os
 import django
-from django.conf import settings
 from django.core.management import call_command
 from django.test.utils import setup_test_environment
 
