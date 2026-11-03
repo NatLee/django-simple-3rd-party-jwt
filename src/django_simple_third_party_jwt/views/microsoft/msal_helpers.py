@@ -13,7 +13,9 @@ settings = {
     "app_secret": jwt_settings.SOCIAL_MICROSOFT_CLIENT_SECRET,
     # "common" accepts both work/school accounts and personal Microsoft accounts.
     "authority": "https://login.microsoftonline.com/common",
-    "scopes": ["user.read"],
+    # "email" puts the account's e-mail address in the ID token; "user.read" lets get_token()
+    # hand out a Microsoft Graph token.
+    "scopes": ["user.read", "email"],
 }
 
 # Compatibility with 0.3.x, kept in this one place; remove both in 1.0:

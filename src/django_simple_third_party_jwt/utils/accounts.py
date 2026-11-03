@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any, Tuple
+from typing import Any, Iterable, Tuple
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.base_user import AbstractBaseUser
@@ -41,6 +41,7 @@ def get_or_create_social_user(
     *,
     email: str,
     username: str,
+    previous_ids: Iterable[str] = (),
     **user_fields: str,
 ) -> AbstractBaseUser:
     """Return the user linked to (provider, unique_id), creating both on first login.
@@ -49,15 +50,22 @@ def get_or_create_social_user(
     UUID when that name is already taken. When the model's username *is* the e-mail address,
     it gets the address, and a taken address refuses the login (LoginRefused). Extra keyword
     arguments (first_name, ...) are set when the model has such a field.
+
+    `previous_ids` are IDs the provider's accounts were linked under before; a record found
+    under one of them is linked under `unique_id` from then on, and keeps its user.
     """
     tag = f"[AUTH][{provider.upper()}]"
-    try:
-        user = SocialAccount.objects.get(provider=provider, unique_id=unique_id).user
-    except SocialAccount.DoesNotExist:
-        pass
-    else:
-        logger.debug("%s Existing user logged in: [%s] - [%s]", tag, user.get_username(), email)
-        return user
+    account = (
+        SocialAccount.objects.filter(provider=provider, unique_id=unique_id).first()
+        or SocialAccount.objects.filter(provider=provider, unique_id__in=list(previous_ids)).order_by("pk").first()
+    )
+    if account is not None:
+        if account.unique_id != unique_id:
+            logger.info("%s Linking [%s] under its new ID [%s]", tag, account.unique_id, unique_id)
+            account.unique_id = unique_id
+            account.save(update_fields=["unique_id"])
+        logger.debug("%s Existing user logged in: [%s] - [%s]", tag, account.user.get_username(), email)
+        return account.user
 
     user_model = get_user_model()
     username_field = user_model.USERNAME_FIELD

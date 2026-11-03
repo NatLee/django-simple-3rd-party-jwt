@@ -37,7 +37,7 @@ class MsalAppTests(SimpleTestCase):
 
         self.assertEqual(flow, {"auth_uri": "https://login"})
         app.return_value.initiate_auth_code_flow.assert_called_once_with(
-            ["user.read"], redirect_uri="http://testserver/sub/api/auth/microsoft/callback"
+            ["user.read", "email"], redirect_uri="http://testserver/sub/api/auth/microsoft/callback"
         )
 
     @mock.patch(APP)
@@ -46,7 +46,7 @@ class MsalAppTests(SimpleTestCase):
         msal_helpers.get_sign_in_flow("http://testserver/")
 
         app.return_value.initiate_auth_code_flow.assert_called_once_with(
-            ["user.read"], redirect_uri="http://testserver/api/auth/microsoft/callback"
+            ["user.read", "email"], redirect_uri="http://testserver/api/auth/microsoft/callback"
         )
 
     @mock.patch(APP)
@@ -81,7 +81,7 @@ class MsalAppTests(SimpleTestCase):
         app.return_value.acquire_token_silent.return_value = {"access_token": "fresh"}
 
         self.assertEqual(msal_helpers.get_token(request_with_session()), "fresh")
-        app.return_value.acquire_token_silent.assert_called_once_with(["user.read"], account="account-1")
+        app.return_value.acquire_token_silent.assert_called_once_with(["user.read", "email"], account="account-1")
 
 
 class TokenCacheTests(SimpleTestCase):

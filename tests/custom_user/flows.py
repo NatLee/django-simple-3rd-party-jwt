@@ -85,3 +85,14 @@ class CustomUserModelTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "alice@gmail.com")
+
+    def test_microsoft_login_creates_a_user_of_the_custom_model(self):
+        claims = {"oid": "oid-carol", "tid": "9188040d-6c67-4c5b-b112-36a304b66dad",
+                  "preferred_username": "carol@gmail.com", "email": "carol@gmail.com"}
+        result = {"access_token": "t", "id_token_claims": claims}
+        with mock.patch("django_simple_third_party_jwt.views.microsoft.auth.get_token_from_code", return_value=result):
+            response = self.client.get("/api/auth/microsoft/callback", {"code": "c"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(EmailUser.objects.get().get_username(), "carol@gmail.com")
+        self.assertEqual(SocialAccount.objects.get().provider, "microsoft")

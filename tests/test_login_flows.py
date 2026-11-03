@@ -24,6 +24,18 @@ GOOGLE_VERIFY = "django_simple_third_party_jwt.serilizers.google_login.id_token.
 MICROSOFT_AUTH = "django_simple_third_party_jwt.views.microsoft.auth"
 
 
+# Microsoft's tenant for personal accounts (outlook.com, hotmail.com, live.com, ...).
+PERSONAL_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad"
+WORK_TENANT = "72f988bf-0000-4000-8000-000000000001"
+
+
+def microsoft_claims(email="carol@gmail.com", oid="oid-carol", tid=PERSONAL_TENANT, **extra):
+    """The ID token claims MSAL hands back after a Microsoft sign-in."""
+    claims = {"oid": oid, "tid": tid, "preferred_username": email, "email": email}
+    claims.update(extra)
+    return {name: value for name, value in claims.items() if value is not None}
+
+
 def google_idinfo(email="alice@gmail.com", sub="google-sub-1"):
     """What Google's verify_oauth2_token returns for a valid credential."""
     return {
@@ -220,8 +232,8 @@ class MicrosoftLoginTests(TestCase):
 
         get_flow.assert_called_once_with(redirect_uri="http://testserver/sub/api/auth/microsoft/callback")
 
-    def callback(self, email="carol@gmail.com"):
-        token_result = {"access_token": "graph-token", "id_token_claims": {"preferred_username": email}}
+    def callback(self, email="carol@gmail.com", **claims):
+        token_result = {"access_token": "graph-token", "id_token_claims": microsoft_claims(email, **claims)}
         with mock.patch(f"{MICROSOFT_AUTH}.get_token_from_code", return_value=token_result):
             return self.client.get("/api/auth/microsoft/callback", {"code": "c", "state": "s"})
 
@@ -241,8 +253,9 @@ class MicrosoftLoginTests(TestCase):
         self.assertTemplateUsed(response, "microsoft/index.html")
         user = User.objects.get(email="carol@gmail.com")
         self.assertEqual(user.username, "carol")
+        # Keyed by the account's immutable IDs, not by its (changeable) name.
         self.assertTrue(
-            SocialAccount.objects.filter(user=user, provider="microsoft", unique_id="carol@gmail.com").exists()
+            SocialAccount.objects.filter(user=user, provider="microsoft", unique_id=f"{PERSONAL_TENANT}/oid-carol").exists()
         )
         self.assertEqual(self.client.session["_auth_user_id"], str(user.pk))
         self.assertEqual(str(AccessToken(response.context["access_token"])["user_id"]), str(user.id))
@@ -277,12 +290,57 @@ class MicrosoftLoginTests(TestCase):
 
         self.assertEqual(User.objects.filter(email="carol@gmail.com").count(), 1)
 
+    def test_callback_knows_a_renamed_account(self):
+        """Same account (tid + oid), new name and address: still the same user."""
+        self.callback()
+        self.client.logout()
+
+        response = self.callback(email="carol.liddell@gmail.com")
+
+        self.assertEqual(response.context["description"], "Welcome!")
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(SocialAccount.objects.get().unique_id, f"{PERSONAL_TENANT}/oid-carol")
+
+    def test_callback_moves_an_account_from_before_the_change_to_its_ids(self):
+        """Up to 0.4.0 accounts were keyed by preferred_username. The first sign-in afterwards
+        finds the old record through the verified address and keys it by tid/oid from then on."""
+        old_user = User.objects.create_user(username="carol", email="carol@gmail.com")
+        SocialAccount.objects.create(user=old_user, provider="microsoft", unique_id="carol@gmail.com")
+
+        response = self.callback()
+
+        self.assertEqual(response.context["description"], "Welcome!")
+        self.assertEqual(User.objects.count(), 1)
+        account = SocialAccount.objects.get()
+        self.assertEqual((account.user, account.unique_id), (old_user, f"{PERSONAL_TENANT}/oid-carol"))
+
+    def test_an_old_account_is_not_taken_over_through_preferred_username(self):
+        """preferred_username can be set by whoever runs the account, so it never picks the user."""
+        victim = User.objects.create_user(username="victim", email="victim@gmail.com")
+        SocialAccount.objects.create(user=victim, provider="microsoft", unique_id="victim@gmail.com")
+
+        self.callback(email="mallory@gmail.com", oid="oid-mallory", preferred_username="victim@gmail.com")
+
+        self.assertEqual(SocialAccount.objects.get(user=victim).unique_id, "victim@gmail.com")
+        self.assertEqual(SocialAccount.objects.get(unique_id=f"{PERSONAL_TENANT}/oid-mallory").user.email,
+                         "mallory@gmail.com")
+
+    def test_work_account_needs_microsoft_to_vouch_for_the_address(self):
+        """For work and school accounts the e-mail claim counts only with xms_edov = true."""
+        refused = self.callback(tid=WORK_TENANT)
+        self.assertEqual(refused.context["description"],
+                         "Sorry, Microsoft has not confirmed an e-mail address for this account.")
+        self.assertFalse(User.objects.exists())
+
+        allowed = self.callback(tid=WORK_TENANT, xms_edov=True)
+        self.assertEqual(allowed.context["description"], "Welcome!")
+
     def test_callback_with_a_taken_username_gets_a_random_one(self):
         User.objects.create_user(username="carol", email="carol@example.com")
 
         self.callback()
 
-        new_user = SocialAccount.objects.get(provider="microsoft", unique_id="carol@gmail.com").user
+        new_user = SocialAccount.objects.get(provider="microsoft", unique_id=f"{PERSONAL_TENANT}/oid-carol").user
         self.assertNotEqual(new_user.username, "carol")
         self.assertEqual(len(new_user.username), 36)  # uuid4
         self.assertEqual(new_user.email, "carol@gmail.com")
@@ -295,13 +353,21 @@ class MicrosoftLoginTests(TestCase):
         self.assertEqual(response.context["description"], "Sorry, this account is not allowed to sign in here.")
         self.assertFalse(User.objects.exists())
 
-    def test_callback_refuses_a_username_that_is_not_an_email(self):
-        """Some Microsoft accounts sign in with a name that has no "@"; that used to be a 500."""
-        response = self.callback(email="no-at-sign")
+    def test_callback_refuses_an_account_without_an_email_address(self):
+        """An account that signs in with a phone number has no e-mail claim."""
+        response = self.callback(email=None, preferred_username="+886900000000")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["access_token"], "")
-        self.assertEqual(response.context["description"], "Sorry, this account is not allowed to sign in here.")
+        self.assertEqual(response.context["description"],
+                         "Sorry, Microsoft has not confirmed an e-mail address for this account.")
+        self.assertFalse(User.objects.exists())
+
+    def test_callback_without_the_account_ids_is_an_error(self):
+        response = self.callback(oid=None)
+
+        self.assertEqual(response.context["description"],
+                         "Something went wrong while signing in with Microsoft. Please try again.")
         self.assertFalse(User.objects.exists())
 
     def test_callback_shows_error_when_microsoft_rejects_the_code(self):
