@@ -71,7 +71,7 @@ class PrefixSlashTests(ReloadUrlsMixin, TestCase):
 
     def test_a_trailing_slash_prefix_answers_at_the_plain_url(self):
         info = {"iss": "https://accounts.google.com", "aud": settings.SOCIAL_GOOGLE_CLIENT_ID,
-                "sub": "s", "email": "alice@gmail.com"}
+                "sub": "s", "email": "alice@gmail.com", "email_verified": True}
         with override_settings(JWT_3RD_PREFIX="api/"):
             importlib.reload(package_urls)
             importlib.reload(test_urlconf)
