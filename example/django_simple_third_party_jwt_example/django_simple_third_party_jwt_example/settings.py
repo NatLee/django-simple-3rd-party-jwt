@@ -2,6 +2,7 @@
 Django settings for django_simple_third_party_jwt_example project.
 """
 
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -188,13 +189,16 @@ JWT_3RD_PREFIX = 'api'
 VALID_REGISTER_DOMAINS = ['gmail.com', 'outlook.com', 'hotmail.com', 'live.com']
 
 # =====================
-# Google
-SOCIAL_GOOGLE_CLIENT_ID = "376808175534-d6mefo6b1kqih3grjjose2euree2g3cs.apps.googleusercontent.com"
+# Credentials: put your own in the environment (see "Getting credentials" in the README).
+# Without them the example uses the package's shared demo apps and logs a warning.
+# Google (client IDs are public, they end up in every login page anyway)
+SOCIAL_GOOGLE_CLIENT_ID = os.environ.get("SOCIAL_GOOGLE_CLIENT_ID", "376808175534-d6mefo6b1kqih3grjjose2euree2g3cs.apps.googleusercontent.com")
 # =====================
 # Microsoft
-SOCIAL_MICROSOFT_CLIENT_ID = '32346173-22bc-43b2-b6ed-f88f6a76e38c'
-# -- Secret
-SOCIAL_MICROSOFT_CLIENT_SECRET = 'K5z8Q~dIXDiFN5qjMjRjIx34cZOJ3Glkrg.dxcG9'
+SOCIAL_MICROSOFT_CLIENT_ID = os.environ.get("SOCIAL_MICROSOFT_CLIENT_ID", '32346173-22bc-43b2-b6ed-f88f6a76e38c')
+# The secret is never written here: set SOCIAL_MICROSOFT_CLIENT_SECRET in the environment.
+if os.environ.get("SOCIAL_MICROSOFT_CLIENT_SECRET"):
+    SOCIAL_MICROSOFT_CLIENT_SECRET = os.environ["SOCIAL_MICROSOFT_CLIENT_SECRET"]
 
 MICROSOFT_JWT_REDIRECT_ACCESS_TOKEN_KEY = 'access_token'
 MICROSOFT_JWT_REDIRECT_REFRESH_TOKEN_KEY = 'refresh_token'
