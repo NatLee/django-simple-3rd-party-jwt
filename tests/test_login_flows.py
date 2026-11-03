@@ -4,9 +4,11 @@ No real OAuth credentials or network access are needed: the calls that would go 
 Google (token verification) and Microsoft (MSAL and Graph) are replaced with mocks.
 These tests describe the current behaviour of the views.
 """
+import logging
 from unittest import mock
 
 from django.contrib.auth.models import User
+from google.auth import exceptions as google_exceptions
 from django.test import TestCase
 from django.test.utils import override_script_prefix
 from django.urls import reverse
@@ -29,6 +31,7 @@ def google_idinfo(email="alice@gmail.com", sub="google-sub-1"):
         "aud": jwt_settings.SOCIAL_GOOGLE_CLIENT_ID,
         "sub": sub,
         "email": email,
+        "email_verified": True,
         "given_name": "Alice",
         "family_name": "Liddell",
     }
@@ -142,41 +145,56 @@ class GoogleLoginTests(TestCase):
 
 
 class GoogleLoginErrorTests(TestCase):
-    """Current answers for credentials that do not check out. A 500 here is one of the
-    open decisions (it would be better as 400/401); these tests pin today's behaviour."""
+    """A credential that does not check out is the client's problem: 401 with the reason
+    (the user's decision, 2026-11-04; it used to be a 500 "Something went wrong :(")."""
     url = "/api/auth/google/token"
-    error = {"status": "error", "detail": "Something went wrong :("}
+    serializer_logger = "django_simple_third_party_jwt.serilizers.google_login"
 
     def post(self):
         return self.client.post(self.url, {"credential": "google-id-token"})
 
-    def test_credential_google_rejects(self):
-        with mock.patch(GOOGLE_VERIFY, side_effect=ValueError("Token expired")):
-            response = self.post()
-
-        self.assertEqual((response.status_code, response.json()), (500, self.error))
+    def assertRefused(self, response, detail):
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"status": "error", "detail": detail})
         self.assertFalse(User.objects.exists())
+
+    def test_credential_google_rejects(self):
+        for error in [ValueError("Token expired, 1 < 2"), google_exceptions.GoogleAuthError("Wrong issuer.")]:
+            with self.subTest(error=error), mock.patch(GOOGLE_VERIFY, side_effect=error), \
+                    self.assertLogs(self.serializer_logger, "WARNING") as logs:
+                response = self.post()
+            self.assertRefused(response, f"Google did not accept the credential: {error}")
+            # A client error, not a crash: logged as a warning, without a traceback.
+            self.assertEqual({r.levelno for r in logs.records}, {logging.WARNING})
+            self.assertFalse(any(r.exc_info for r in logs.records))
 
     def test_wrong_issuer(self):
         with mock.patch(GOOGLE_VERIFY, return_value=dict(google_idinfo(), iss="https://evil.example")):
             response = self.post()
 
-        self.assertEqual((response.status_code, response.json()), (500, self.error))
-        self.assertFalse(User.objects.exists())
+        self.assertRefused(response, "Google did not accept the credential: it was not issued by Google.")
 
     def test_token_for_another_client_id(self):
         with mock.patch(GOOGLE_VERIFY, return_value=dict(google_idinfo(), aud="someone-else.apps.googleusercontent.com")):
             response = self.post()
 
-        self.assertEqual((response.status_code, response.json()), (500, self.error))
-        self.assertFalse(User.objects.exists())
+        self.assertRefused(response, "Google did not accept the credential: it was issued for another client ID.")
 
-    def test_email_verified_flag_is_not_checked_yet(self):
-        """Open decision: an unverified address on an allowed domain still gets in."""
-        with mock.patch(GOOGLE_VERIFY, return_value=dict(google_idinfo(), email_verified=False)):
-            response = self.post()
+    def test_unverified_email_is_refused(self):
+        """email_verified is checked by default (the user's decision, 2026-11-04)."""
+        for flag in [False, None]:
+            claims = dict(google_idinfo(), email_verified=flag)
+            if flag is None:
+                del claims["email_verified"]
+            with self.subTest(email_verified=flag), mock.patch(GOOGLE_VERIFY, return_value=claims):
+                response = self.post()
+            self.assertRefused(response, "Google has not verified this e-mail address.")
 
-        self.assertEqual(response.status_code, 200)
+    def test_google_out_of_reach_is_still_a_server_error(self):
+        """Not the client's fault when Google's keys cannot be fetched, so no 401."""
+        with mock.patch(GOOGLE_VERIFY, side_effect=google_exceptions.TransportError("no network")):
+            with self.assertRaises(google_exceptions.TransportError):
+                self.post()
 
 
 class MicrosoftLoginTests(TestCase):

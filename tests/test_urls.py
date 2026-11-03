@@ -2,7 +2,6 @@ import importlib
 from unittest import mock
 
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import clear_url_caches, reverse
 
@@ -35,14 +34,14 @@ class ReloadUrlsMixin:
 
 
 class MissingPrefixTests(ReloadUrlsMixin, SimpleTestCase):
-    def test_missing_jwt_3rd_prefix_says_what_to_set(self):
-        """Still a start-up error (the routes cannot be built without it), but a
-        Django ImproperlyConfigured that names the setting instead of an
-        AttributeError from django.conf.global_settings."""
+    def test_missing_jwt_3rd_prefix_means_api(self):
+        """JWT_3RD_PREFIX is optional, default "api" (the user's decision, 2026-11-04).
+        It used to stop start-up with an ImproperlyConfigured."""
         with override_settings():
             del settings.JWT_3RD_PREFIX
-            with self.assertRaisesMessage(ImproperlyConfigured, "JWT_3RD_PREFIX = 'api'"):
-                importlib.reload(package_urls)
+            importlib.reload(package_urls)
+
+        self.assertEqual(routes(), ["api/" + end for end in ROUTE_ENDS])
 
     def test_prefix_from_settings_is_used(self):
         with override_settings(JWT_3RD_PREFIX="v2"):
@@ -72,7 +71,7 @@ class PrefixSlashTests(ReloadUrlsMixin, TestCase):
 
     def test_a_trailing_slash_prefix_answers_at_the_plain_url(self):
         info = {"iss": "https://accounts.google.com", "aud": settings.SOCIAL_GOOGLE_CLIENT_ID,
-                "sub": "s", "email": "alice@gmail.com"}
+                "sub": "s", "email": "alice@gmail.com", "email_verified": True}
         with override_settings(JWT_3RD_PREFIX="api/"):
             importlib.reload(package_urls)
             importlib.reload(test_urlconf)

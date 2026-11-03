@@ -20,7 +20,7 @@ def check_jwt_3rd_prefix(app_configs: Any, **kwargs: Any) -> List[checks.CheckMe
     """
     prefix = getattr(settings, "JWT_3RD_PREFIX", None)
     if not isinstance(prefix, str):
-        return []  # missing: urls.py raises an ImproperlyConfigured that names the setting
+        return []  # not set: the default "api" applies, nothing to point out
     clean = clean_prefix(prefix)
     if clean == prefix:
         return []

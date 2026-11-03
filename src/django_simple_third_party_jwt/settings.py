@@ -28,10 +28,21 @@ def auth_route(prefix: str, rest: str) -> str:
     return f"{prefix}/auth/{rest}" if prefix else f"auth/{rest}"
 
 
-# 網址前綴：登入網址是 /<JWT_3RD_PREFIX>/auth/...，通常設成 "api"。
+# 網址前綴：登入網址是 /<JWT_3RD_PREFIX>/auth/...，沒設定時是 "api"。
 # 前後的 "/" 會被拿掉（"/api/" 等於 "api"）；空字串代表網址直接從 /auth/... 開始。
-# urls.py 直接讀 Django 的設定，所以專案一定要設；這裡的預設值只給 Microsoft 回呼網址用。
-JWT_3RD_PREFIX = clean_prefix(getattr(settings, "JWT_3RD_PREFIX", ""))
+DEFAULT_JWT_3RD_PREFIX = "api"
+
+
+def route_prefix() -> str:
+    """JWT_3RD_PREFIX as the routes use it, read from the project's settings right now.
+
+    urls.py calls this when Django loads the URLconf; the module-level JWT_3RD_PREFIX below
+    is the same value, read once at import like the other settings.
+    """
+    return clean_prefix(getattr(settings, "JWT_3RD_PREFIX", DEFAULT_JWT_3RD_PREFIX))
+
+
+JWT_3RD_PREFIX = route_prefix()
 
 # 允許登入（和自動註冊）的 email 網域，Google 和 Microsoft 都適用。
 VALID_REGISTER_DOMAINS = getattr(

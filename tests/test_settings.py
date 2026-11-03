@@ -27,7 +27,7 @@ class DefaultsTests(SimpleTestCase):
         with self.assertLogs(LOGGER, "WARNING"):
             with package_settings(remove=optional + CREDENTIAL_SETTINGS) as conf:
                 self.assertEqual(conf.LOGIN_REDIRECT_URL, "/")
-                self.assertEqual(conf.JWT_3RD_PREFIX, "")
+                self.assertEqual(conf.JWT_3RD_PREFIX, "api")
                 self.assertEqual(
                     conf.VALID_REGISTER_DOMAINS,
                     ["gmail.com", "outlook.com", "hotmail.com", "live.com"],
