@@ -66,7 +66,8 @@ REST_FRAMEWORK = {
 
 SECURE_REFERRER_POLICY = "no-referrer-when-downgrade"
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
-SOCIAL_GOOGLE_CLIENT_ID = "376808175534-d6mefo6b1kqih3grjjose2euree2g3cs.apps.googleusercontent.com"
+# A placeholder like the Microsoft ones below: Google's token check is mocked in the tests.
+SOCIAL_GOOGLE_CLIENT_ID = "test-google-client-id.apps.googleusercontent.com"
 LOGIN_REDIRECT_URL = "/"
 VALID_REGISTER_DOMAINS = ["gmail.com"]
 

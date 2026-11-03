@@ -1,5 +1,7 @@
 from django.shortcuts import render, redirect
-from django.conf import settings
+
+# The package's settings, not Django's: they include the shared demo apps when a credential is not set.
+from django_simple_third_party_jwt import settings as jwt_settings
 
 import logging
 
@@ -8,8 +10,8 @@ logger = logging.getLogger(__name__)
 def dashboard(request):
     # template path
     return render(request, "dashboard.html", {
-        'social_google_client_id':settings.SOCIAL_GOOGLE_CLIENT_ID,
-        'social_microsoft_client_id': settings.SOCIAL_MICROSOFT_CLIENT_ID,
+        'social_google_client_id':jwt_settings.SOCIAL_GOOGLE_CLIENT_ID,
+        'social_microsoft_client_id': jwt_settings.SOCIAL_MICROSOFT_CLIENT_ID,
     })
 
 
@@ -33,7 +35,7 @@ def login(request):
         form = AuthenticationForm(request)
     return render(request, 'login.html', {
         'form': form,
-        'social_google_client_id': settings.SOCIAL_GOOGLE_CLIENT_ID,
+        'social_google_client_id': jwt_settings.SOCIAL_GOOGLE_CLIENT_ID,
     })
 
 
