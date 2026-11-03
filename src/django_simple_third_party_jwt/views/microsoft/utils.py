@@ -4,7 +4,8 @@ from typing import Any, Dict
 
 import requests
 
-from django_simple_third_party_jwt.views.microsoft.msal_helpers import callback_url  # noqa: F401 (old import path)
+# 0.3.0 import path, see the compatibility note in msal_helpers.
+from django_simple_third_party_jwt.views.microsoft.msal_helpers import callback_url  # noqa: F401
 
 graph_url = "https://graph.microsoft.com/v1.0"
 

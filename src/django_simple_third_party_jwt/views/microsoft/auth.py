@@ -30,7 +30,7 @@ TEMPLATE = "microsoft/index.html"
 
 def sign_in(request: HttpRequest) -> HttpResponseRedirect:
     """Start the sign-in flow and send the browser to Microsoft."""
-    flow = get_sign_in_flow(request.build_absolute_uri("/"))
+    flow = get_sign_in_flow(redirect_uri=request.build_absolute_uri(reverse("microsoft-callback")))
     try:
         request.session["auth_flow"] = flow
     except Exception:
