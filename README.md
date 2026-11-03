@@ -1,7 +1,7 @@
 # Django Simple 3rd Party JWT
 
-[![Test](https://github.com/NatLee/Django-Simple-3rd-Party-JWT/actions/workflows/test.yml/badge.svg)](https://github.com/NatLee/Django-Simple-3rd-Party-JWT/actions/workflows/test.yml)
-[![Release](https://github.com/NatLee/Django-Simple-3rd-Party-JWT/actions/workflows/release.yml/badge.svg)](https://github.com/NatLee/Django-Simple-3rd-Party-JWT/actions/workflows/release.yml)
+[![Test](https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/test.yml/badge.svg)](https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/test.yml)
+[![Release](https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/release.yml/badge.svg)](https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/release.yml)
 
 
 <img width="1363" alt="image" src="https://user-images.githubusercontent.com/10178964/222040924-8cb37622-b1ac-4343-bb2f-96e48aabfa87.png">
@@ -9,7 +9,7 @@
 
 This is a simple tool for 3rd party login with JWT.
 
-> See Simple Version in another repo -> [JWT 3rd Party Dashboard](https://github.com/NatLee/Django-Simple-3rd-Party-JWT-Dev-Dashboard).
+> See Simple Version in another repo -> [JWT 3rd Party Dashboard](https://github.com/NatLee/django-simple-3rd-party-jwt-dev-dashboard).
 
 ## Installation
 
@@ -23,14 +23,17 @@ Check it in [Pypi](https://pypi.org/project/django-simple-third-party-jwt/).
 
 ### Backend
 
-1. Add `django_simple_third_party_jwt` to your `INSTALLED_APPS` in `settings.py` like this:
+1. Add `rest_framework` and `django_simple_third_party_jwt` to your `INSTALLED_APPS` in `settings.py` like this:
 
 ```py
 INSTALLED_APPS = [
 ...
+'rest_framework',  # needed for the API error pages a browser sees
 'django_simple_third_party_jwt',
 ]
 ```
+
+Keep `django.contrib.sessions` (it is in every new project): the session login and Microsoft login use it.
 
 2. Add APP settings to your `settings.py` like this:
 
@@ -85,7 +88,7 @@ SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 LOGIN_REDIRECT_URL = "/"
 VALID_REGISTER_DOMAINS = ["gmail.com", "hotmail.com"] # Only these domains can login.
 
-# API URL Prefix
+# API URL prefix (required). The login routes are served at /<JWT_3RD_PREFIX>/auth/...
 JWT_3RD_PREFIX = 'api'
 
 # ================== Google Auth ==================
@@ -138,9 +141,12 @@ SOCIAL_MICROSOFT_CLIENT_SECRET = 'K5z8Q~dIXDiFN5qjMjRjIx34cZOJ3Glkrg.dxcG9'
 from django.conf import settings
 from django.urls import include
 urlpatterns += [
-    path("api/", include("django_simple_third_party_jwt.urls")),
+    # Include at the root: the "api/" part comes from JWT_3RD_PREFIX.
+    path("", include("django_simple_third_party_jwt.urls")),
 ]
 ```
+
+With `JWT_3RD_PREFIX = 'api'` this serves `/api/auth/google/token`, `/api/auth/google/token/session` and `/api/auth/microsoft/signin|signout|callback`, the URLs used in the frontend examples below. Do not include it under `path("api/", ...)` as well, or the routes become `/api/api/auth/...`.
 
 You also need to include JWT settings in your `urls.py`.
 
@@ -162,8 +168,10 @@ urlpatterns += [
 - Migrate
 
 ```bash
-python manage.py migrate django_simple_third_party_jwt
+python manage.py migrate
 ```
+
+Run the full `migrate`, not only this app: the session table it creates is needed for the session and Microsoft logins.
 
 - Test
 
@@ -193,7 +201,7 @@ You need to check `{{ social_google_client_id }}` is the same with `Metadata` an
 <li>
     <div id="g_id_onload"
             data-client_id="{{ social_google_client_id }}"
-            data-callback="get_jwt_using_google_credential" </div>
+            data-callback="get_jwt_using_google_credential"></div>
     <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline"
             data-text="sign_in_with" data-shape="rectangular" data-logo_alignment="left">
     </div>
@@ -259,7 +267,7 @@ Set `LOGIN_REDIRECT_URL` in `settings.py` and add the following code in your `Ht
 
 ## Example
 
-Check [Example of dashboard](https://github.com/NatLee/Django-Simple-3rd-Party-JWT-Dev-Dashboard).
+Check [Example of dashboard](https://github.com/NatLee/django-simple-3rd-party-jwt-dev-dashboard).
 
 Or you can use the following steps.
 
@@ -268,8 +276,8 @@ Or you can use the following steps.
 You can see the example in `./example/`
 
 ```bash
-git clone https://github.com/NatLee/Django-Simple-3rd-Party-JWT
-cd Django-Simple-3rd-Party-JWT/example/django_simple_third_party_jwt_example/
+git clone https://github.com/NatLee/django-simple-3rd-party-jwt
+cd django-simple-3rd-party-jwt/example/django_simple_third_party_jwt_example/
 pip install -r requirements.txt
 python manage.py makemigrations && python manage.py migrate
 python manage.py runserver 0.0.0.0:8000
@@ -289,12 +297,12 @@ There are several url routes available in this example.
 
 ```
 
-api/auth/google/ <---- Google Login
-api/auth/google/session <------ Google Login with Django Session
+api/auth/google/token <---- Google Login
+api/auth/google/token/session <------ Google Login with Django Session
 
-api/ auth/microsoft/signin <----- Microsoft Login with Django Session
-api/ auth/microsoft/signout <----- Microsoft Logout
-api/ auth/microsoft/callback <----- Microsoft Login Callback
+api/auth/microsoft/signin <----- Microsoft Login with Django Session
+api/auth/microsoft/signout <----- Microsoft Logout
+api/auth/microsoft/callback <----- Microsoft Login Callback
 
 api/__hidden_admin/
 api/__hidden_dev_dashboard/
@@ -346,6 +354,18 @@ Also can see all information of APIs in `http://localhost:8000/api/__hidden_swag
 ## More
 
 Check https://developers.google.com/identity/gsi/web/guides/overview with more information of Google Login API.
+
+## Development
+
+The tests mock Google and Microsoft, so they need no OAuth credentials.
+
+```bash
+pip install tox
+tox run -f py312     # every supported Django version on Python 3.12
+tox run -e package   # check-manifest, build the sdist and wheel, twine check
+```
+
+CI runs the same tox environments on Python 3.8 to 3.14.
 
 ## Misc tools
 
