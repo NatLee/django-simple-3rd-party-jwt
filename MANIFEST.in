@@ -3,8 +3,8 @@ include *.md
 include *.sh
 include *.ps1
 include LICENSE
-recursive-include src *
-recursive-include src/django_simple_third_party_jwt/templates *
-recursive-include src/django_simple_third_party_jwt/templates/microsoft *
-recursive-include tests test*.py
-recursive-include example *
+# Only the file types the project keeps in git, so whatever a local run leaves behind
+# (compiled files, the example's db.sqlite3, logs) never ends up in the sdist.
+recursive-include src *.py *.html
+recursive-include tests *.py
+recursive-include example *.py *.html *.js *.css *.txt *.sh *.ps1
