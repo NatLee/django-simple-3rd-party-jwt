@@ -220,6 +220,17 @@ class MicrosoftLoginTests(TestCase):
         get_flow.assert_called_once_with(redirect_uri="http://testserver/api/auth/microsoft/callback")
         self.assertEqual(self.client.session["auth_flow"], flow)
 
+    def test_sign_in_without_credentials_says_so_instead_of_failing_in_msal(self):
+        with package_settings(remove=["SOCIAL_MICROSOFT_CLIENT_ID", "SOCIAL_MICROSOFT_CLIENT_SECRET"]):
+            with mock.patch(f"{MICROSOFT_AUTH}.get_sign_in_flow") as get_flow, \
+                    self.assertLogs(MICROSOFT_AUTH, "ERROR") as logs:
+                response = self.client.get("/api/auth/microsoft/signin")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["description"], "Microsoft sign-in is not set up on this site.")
+        get_flow.assert_not_called()
+        self.assertIn("SOCIAL_MICROSOFT_CLIENT_ID, SOCIAL_MICROSOFT_CLIENT_SECRET", logs.output[0])
+
     def test_sign_in_sends_microsoft_back_to_wherever_the_callback_is_served(self):
         """The redirect URI is the callback route's own URL. It used to be the site root plus a
         path rebuilt from JWT_3RD_PREFIX, which left out a SCRIPT_NAME (a site served under a

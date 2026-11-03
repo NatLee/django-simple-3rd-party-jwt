@@ -6,7 +6,7 @@ first imported; the defaults below apply when a setting is missing.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, List
 
 from django.conf import settings
 
@@ -74,8 +74,8 @@ AZURE_APP_REGISTRATIONS_PAGE = (
 )
 
 # =====================
-# 第三方登入的憑證。沒設定時會用作者的示範應用程式，並在啟動時印出警告。
-# 正式環境一定要換成自己的（申請頁面見上面兩個網址）。
+# 第三方登入的憑證。正式環境一定要換成自己的（申請頁面見上面兩個網址）。
+# Google：沒設定時用作者的示範用戶端（client ID 本來就會出現在每個登入頁），並在啟動時印出警告。
 
 __DEV_GOOGLE_CLIENT_ID = '376808175534-d6mefo6b1kqih3grjjose2euree2g3cs.apps.googleusercontent.com'
 SOCIAL_GOOGLE_CLIENT_ID = _setting_or_demo(
@@ -83,18 +83,20 @@ SOCIAL_GOOGLE_CLIENT_ID = _setting_or_demo(
     "Google client ID", GOOGLE_CREDENTIALS_PAGE,
 )
 
-__DEV_MICROSOFT_CLIENT_ID = '32346173-22bc-43b2-b6ed-f88f6a76e38c'
-SOCIAL_MICROSOFT_CLIENT_ID = _setting_or_demo(
-    "SOCIAL_MICROSOFT_CLIENT_ID", __DEV_MICROSOFT_CLIENT_ID,
-    "Microsoft client ID", AZURE_APP_REGISTRATIONS_PAGE,
-)
+# Microsoft：沒有示範應用程式（它的 secret 曾經公開過；使用者 2026-11-04 決定拿掉）。
+# 沒設定時，manage.py check 會說要設哪些（django_simple_third_party_jwt.W002），登入頁也會說明。
+SOCIAL_MICROSOFT_CLIENT_ID = getattr(settings, "SOCIAL_MICROSOFT_CLIENT_ID", None)
+SOCIAL_MICROSOFT_CLIENT_SECRET = getattr(settings, "SOCIAL_MICROSOFT_CLIENT_SECRET", None)
 
-# 警告：使用者端密鑰應該保密，不應該在版本控制中公開。
-__DEV_MICROSOFT_CLIENT_SECRET = 'K5z8Q~dIXDiFN5qjMjRjIx34cZOJ3Glkrg.dxcG9'
-SOCIAL_MICROSOFT_CLIENT_SECRET = _setting_or_demo(
-    "SOCIAL_MICROSOFT_CLIENT_SECRET", __DEV_MICROSOFT_CLIENT_SECRET,
-    "Microsoft client secret", AZURE_APP_REGISTRATIONS_PAGE,
-)
+
+def missing_microsoft_credentials() -> List[str]:
+    """The names of the Microsoft credential settings that are not set."""
+    values = {
+        "SOCIAL_MICROSOFT_CLIENT_ID": SOCIAL_MICROSOFT_CLIENT_ID,
+        "SOCIAL_MICROSOFT_CLIENT_SECRET": SOCIAL_MICROSOFT_CLIENT_SECRET,
+    }
+    return [name for name, value in values.items() if not value]
+
 
 # =====================
 # Microsoft 登入完成後，回呼頁面會把 JWT 存進瀏覽器的 localStorage，用的是下面這兩個鍵名。

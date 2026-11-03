@@ -33,7 +33,7 @@
                     <h5 class="card-title">Google 客戶端 ID</h5>
                     <p class="card-text">{{ social_google_client_id }}</p>
                     <h5 class="card-title mt-3">Microsoft 客戶端 ID</h5>
-                    <p class="card-text">{{ social_microsoft_client_id }}</p>
+                    <p class="card-text">{{ social_microsoft_client_id|default:"not set (see SOCIAL_MICROSOFT_CLIENT_ID)" }}</p>
                 </div>
             </div>
         </div>

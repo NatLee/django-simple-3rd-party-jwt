@@ -35,10 +35,16 @@ PERSONAL_ACCOUNTS_TENANT_ID = "9188040d-6c67-4c5b-b112-36a304b66dad"
 NOT_ALLOWED = "Sorry, this account is not allowed to sign in here."
 NO_VERIFIED_EMAIL = "Sorry, Microsoft has not confirmed an e-mail address for this account."
 FAILED = "Something went wrong while signing in with Microsoft. Please try again."
+NOT_SET_UP = "Microsoft sign-in is not set up on this site."
 
 
-def sign_in(request: HttpRequest) -> HttpResponseRedirect:
+def sign_in(request: HttpRequest) -> HttpResponse:
     """Start the sign-in flow and send the browser to Microsoft."""
+    missing = jwt_settings.missing_microsoft_credentials()
+    if missing:
+        # manage.py check has said so already (W002); here the visitor gets a page, not a 500.
+        logger.error("[AUTH][MICROSOFT] Microsoft sign-in is not set up: set %s", ", ".join(missing))
+        return _render_page(request, email="", description=NOT_SET_UP)
     flow = get_sign_in_flow(redirect_uri=request.build_absolute_uri(reverse("microsoft-callback")))
     try:
         request.session["auth_flow"] = flow
