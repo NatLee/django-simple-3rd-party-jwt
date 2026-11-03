@@ -1,10 +1,17 @@
-# Django Simple 3rd Party JWT
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/NatLee/django-simple-3rd-party-jwt/main/docs/images/hero-dark.png">
+    <img src="https://raw.githubusercontent.com/NatLee/django-simple-3rd-party-jwt/main/docs/images/hero-light.png" alt="Django Simple 3rd Party JWT: the browser signs in with Google (POST /api/auth/google/token) or Microsoft (GET /api/auth/microsoft/signin), your Django site checks the login with the provider, keeps only the VALID_REGISTER_DOMAINS and finds or creates the user, and you get a Simple JWT access/refresh pair back to send as Authorization: Bearer">
+  </picture>
+</p>
 
-[![Test](https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/test.yml/badge.svg)](https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/test.yml)
-[![PyPI](https://img.shields.io/pypi/v/django-simple-third-party-jwt)](https://pypi.org/project/django-simple-third-party-jwt/)
-[![Python](https://img.shields.io/pypi/pyversions/django-simple-third-party-jwt)](https://pypi.org/project/django-simple-third-party-jwt/)
-[![Django](https://img.shields.io/pypi/frameworkversions/django/django-simple-third-party-jwt?label=django)](https://pypi.org/project/django-simple-third-party-jwt/)
-[![License: MIT](https://img.shields.io/github/license/NatLee/django-simple-3rd-party-jwt)](https://github.com/NatLee/django-simple-3rd-party-jwt/blob/main/LICENSE)
+<p align="center">
+  <a href="https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/test.yml"><img src="https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/test.yml/badge.svg" alt="Test"></a>
+  <a href="https://pypi.org/project/django-simple-third-party-jwt/"><img src="https://img.shields.io/pypi/v/django-simple-third-party-jwt" alt="PyPI"></a>
+  <a href="https://pypi.org/project/django-simple-third-party-jwt/"><img src="https://img.shields.io/pypi/pyversions/django-simple-third-party-jwt" alt="Python"></a>
+  <a href="https://pypi.org/project/django-simple-third-party-jwt/"><img src="https://img.shields.io/pypi/frameworkversions/django/django-simple-third-party-jwt?label=django" alt="Django"></a>
+  <a href="https://github.com/NatLee/django-simple-3rd-party-jwt/blob/main/LICENSE"><img src="https://img.shields.io/github/license/NatLee/django-simple-3rd-party-jwt" alt="License: MIT"></a>
+</p>
 
 Let people sign in to your Django site with **Google** or **Microsoft** and hand your
 frontend a **JWT** it can send to your API. Add one app and a few settings and you get
