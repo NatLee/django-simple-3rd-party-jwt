@@ -3,7 +3,7 @@
 [![Test](https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/test.yml/badge.svg)](https://github.com/NatLee/django-simple-3rd-party-jwt/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/django-simple-third-party-jwt)](https://pypi.org/project/django-simple-third-party-jwt/)
 [![Python](https://img.shields.io/pypi/pyversions/django-simple-third-party-jwt)](https://pypi.org/project/django-simple-third-party-jwt/)
-[![Django](https://img.shields.io/pypi/djversions/django-simple-third-party-jwt?label=django)](https://pypi.org/project/django-simple-third-party-jwt/)
+[![Django](https://img.shields.io/pypi/frameworkversions/django/django-simple-third-party-jwt?label=django)](https://pypi.org/project/django-simple-third-party-jwt/)
 [![License: MIT](https://img.shields.io/github/license/NatLee/django-simple-3rd-party-jwt)](https://github.com/NatLee/django-simple-3rd-party-jwt/blob/main/LICENSE)
 
 Let people sign in to your Django site with **Google** or **Microsoft** and hand your
