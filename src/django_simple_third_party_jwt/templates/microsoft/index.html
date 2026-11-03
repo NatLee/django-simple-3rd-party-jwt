@@ -79,7 +79,7 @@
         <h1>Welcome, Traveler!</h1>
         <h2>Microsoft Login</h2>
 
-        <div id="description">Hello World!</div>
+        <div id="description">{{ description }}</div>
         <div class="loader"></div>
         <div id="countdown"></div>
     </div>
@@ -108,7 +108,7 @@
         var countdownElement = document.getElementById('countdown');
         var timeleft = 3;
         var countdownTimer = setInterval(function(){
-            countdownElement.innerHTML = "Redirecting in " + timeleft + " seconds...";
+            countdownElement.textContent = "Redirecting in " + timeleft + (timeleft === 1 ? " second" : " seconds") + "...";
             timeleft -= 1;
             if(timeleft < 0){
                 clearInterval(countdownTimer);

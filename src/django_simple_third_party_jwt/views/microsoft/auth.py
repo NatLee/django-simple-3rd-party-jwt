@@ -93,9 +93,9 @@ def get_or_create_user(email: str, username: str) -> User:
 def render_error(request: HttpRequest, email: str) -> HttpResponse:
     """The callback page without tokens: "not allowed" when we know who it was."""
     if email:
-        description = "You are not allowed to access this! :("
+        description = "Sorry, this account is not allowed to sign in here."
     else:
-        description = "There are something went wrong! :("
+        description = "Something went wrong while signing in with Microsoft. Please try again."
     return _render_page(request, email=email, description=description)
 
 
