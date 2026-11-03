@@ -253,7 +253,7 @@ class MicrosoftLoginTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["access_token"], "")
-        self.assertEqual(response.context["description"], "You are not allowed to access this! :(")
+        self.assertEqual(response.context["description"], "Sorry, this account is not allowed to sign in here.")
         self.assertFalse(User.objects.exists())
 
     def test_callback_refuses_a_username_that_is_not_an_email(self):
@@ -262,7 +262,7 @@ class MicrosoftLoginTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["access_token"], "")
-        self.assertEqual(response.context["description"], "You are not allowed to access this! :(")
+        self.assertEqual(response.context["description"], "Sorry, this account is not allowed to sign in here.")
         self.assertFalse(User.objects.exists())
 
     def test_callback_shows_error_when_microsoft_rejects_the_code(self):
@@ -271,7 +271,7 @@ class MicrosoftLoginTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["access_token"], "")
-        self.assertEqual(response.context["description"], "There are something went wrong! :(")
+        self.assertEqual(response.context["description"], "Something went wrong while signing in with Microsoft. Please try again.")
         self.assertFalse(User.objects.exists())
 
     def test_callback_logs_why_microsoft_refused_the_code(self):
@@ -285,11 +285,24 @@ class MicrosoftLoginTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["access_token"], "")
-        self.assertEqual(response.context["description"], "There are something went wrong! :(")
+        self.assertEqual(response.context["description"], "Something went wrong while signing in with Microsoft. Please try again.")
         self.assertIn("invalid_client", logs.output[0])
         self.assertIn("AADSTS7000215: Invalid client secret provided.", logs.output[0])
         get_user.assert_not_called()
         self.assertFalse(User.objects.exists())
+
+    def test_callback_page_shows_the_message_without_javascript_too(self):
+        page = self.callback(email="mallory@example.com").content.decode()
+
+        self.assertIn('<div id="description">Sorry, this account is not allowed to sign in here.</div>', page)
+        self.assertNotIn("Hello World!", page)
+
+    def test_callback_page_counts_down_in_proper_english(self):
+        """It used to say "Redirecting in 1 seconds..."."""
+        page = self.callback().content.decode()
+
+        self.assertIn('(timeleft === 1 ? " second" : " seconds")', page)
+        self.assertNotIn('timeleft + " seconds..."', page)
 
     def test_sign_out_clears_microsoft_token_cache(self):
         session = self.client.session

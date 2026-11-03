@@ -18,7 +18,7 @@ settings = {
 
 # Where Microsoft sends the browser back to, relative to the site root.
 # It has to match a redirect URI registered for the app in Azure.
-callback_url = jwt_settings.JWT_3RD_PREFIX + "/auth/microsoft/callback"
+callback_url = jwt_settings.auth_route(jwt_settings.JWT_3RD_PREFIX, "microsoft/callback")
 
 
 def load_cache(request: HttpRequest) -> msal.SerializableTokenCache:

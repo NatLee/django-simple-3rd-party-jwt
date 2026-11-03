@@ -91,7 +91,7 @@ INSTALLED_APPS = [
     "django_simple_third_party_jwt",
 ]
 
-# The login routes live under /<JWT_3RD_PREFIX>/auth/... (required; no "/" at either end).
+# The login routes live under /<JWT_3RD_PREFIX>/auth/... (required).
 JWT_3RD_PREFIX = "api"
 
 # Only these e-mail domains can sign in.
@@ -291,7 +291,7 @@ If the domain is not allowed, it says so in red and stores nothing.
 | What you see | What to do |
 |---|---|
 | `ImproperlyConfigured: … needs JWT_3RD_PREFIX` at start-up | Add `JWT_3RD_PREFIX = "api"` to `settings.py`. |
-| Warning `django_simple_third_party_jwt.W001` or `W002` at start-up | The prefix is empty or has a `/` at one end, so the routes are not where you expect them. Use `"api"`, and register the matching redirect URI in Azure. |
+| Warning `django_simple_third_party_jwt.W001` at start-up | `JWT_3RD_PREFIX` has a `/` at one end. It is ignored, so the routes are at `/api/auth/...`; write `"api"` to silence the warning. Coming from 0.3.2 or earlier? See [Upgrading](#upgrading-from-032-or-earlier). |
 | `KeyError: 'SOCIAL_MICROSOFT_CLIENT_SECRET'` at start-up | Export the variable before `runserver`, or leave the Microsoft block out. |
 | 404 at `/api/api/auth/...` | You included the app under `path("api/", ...)`. Include it at the root, `path("", ...)`. |
 | `no such table: django_session` (or `social_account`), or `NOT NULL constraint failed: auth_user.last_login` | The database is not fully migrated. Run the full `python manage.py migrate`, not just this app. |
@@ -299,14 +299,42 @@ If the domain is not allowed, it says so in red and stores nothing.
 | The Google endpoint answers `401` "This email is invalid." | The address's domain is not in `VALID_REGISTER_DOMAINS`. |
 | The Google endpoint answers `500` "Something went wrong :(" | Google did not accept the credential, often because `SOCIAL_GOOGLE_CLIENT_ID` is not the client ID in your page. The server log says why. |
 | Microsoft shows an `AADSTS50011` redirect URI error | Register exactly the redirect URI the error shows (usually `http://localhost:8000/api/auth/microsoft/callback`), and browse the site at that host. |
-| The callback page says "There are something went wrong! :(" | The server log has Microsoft's reason. `invalid_client` with `AADSTS7000215` means `SOCIAL_MICROSOFT_CLIENT_SECRET` holds the secret's ID instead of its value, or an expired secret. (Up to 0.3.2 the log only says `'access_token'`.) |
-| The callback page says "You are not allowed to access this! :(" | The account's domain is not in `VALID_REGISTER_DOMAINS`, or its name is not an e-mail address. |
+| The callback page says "Something went wrong while signing in with Microsoft. Please try again." | The server log has Microsoft's reason. `invalid_client` with `AADSTS7000215` means `SOCIAL_MICROSOFT_CLIENT_SECRET` holds the secret's ID instead of its value, or an expired secret. (Up to 0.3.2 the log only says `'access_token'`.) |
+| The callback page says "Sorry, this account is not allowed to sign in here." | The account's domain is not in `VALID_REGISTER_DOMAINS`, or its name is not an e-mail address. |
+
+## Upgrading from 0.3.2 or earlier
+
+Only projects whose `JWT_3RD_PREFIX` starts or ends with a `/` (`"/api"`, `"api/"`,
+`"/api/"`) or is `"/"` or `""` are affected. With `JWT_3RD_PREFIX = "api"` nothing changes.
+
+0.3.2 and earlier kept that slash, so the routes and the Microsoft redirect URI ended up at
+odd addresses. Now the slash is ignored and an empty prefix means "no prefix":
+
+| `JWT_3RD_PREFIX` | Google token route, 0.3.2 | Now | Microsoft redirect URI, 0.3.2 | Now |
+|---|---|---|---|---|
+| `"api/"` | `/api//auth/google/token` | `/api/auth/google/token` | `<site>/api//auth/microsoft/callback` | `<site>/api/auth/microsoft/callback` |
+| `"/api"` | `/%2Fapi/auth/google/token` | `/api/auth/google/token` | `<site>//api/auth/microsoft/callback` | `<site>/api/auth/microsoft/callback` |
+| `""` | `/%2Fauth/google/token` | `/auth/google/token` | `<site>//auth/microsoft/callback` | `<site>/auth/microsoft/callback` |
+
+If yours is one of them:
+
+1. In Azure (*App registrations* → your app → *Authentication*), add the new redirect URI.
+   Until you do, Microsoft answers `AADSTS50011` (redirect URI mismatch).
+2. If your frontend has the old address typed in (with the `//` or `%2F`), change it.
+   Links built with `{% url %}` or `reverse()` follow by themselves.
+3. Google needs nothing: its *Authorized JavaScript origins* contain no path.
+4. Optional: drop the slash from the setting. Until then, `manage.py check` shows the
+   warning `django_simple_third_party_jwt.W001` with the new addresses.
+
+The Microsoft callback page also has clearer messages now: "Sorry, this account is not
+allowed to sign in here." and "Something went wrong while signing in with Microsoft.
+Please try again." If your code or tests look for the old wording, update them.
 
 ## Settings reference
 
 | Setting | Required | Default | What it does |
 |---|---|---|---|
-| `JWT_3RD_PREFIX` | **Yes** | none: start-up error | URL prefix for every route: `/<prefix>/auth/...`. No leading or trailing slash, e.g. `"api"` (`manage.py check` warns otherwise). Also part of the Microsoft redirect URI. |
+| `JWT_3RD_PREFIX` | **Yes** | none: start-up error | URL prefix for every route: `/<prefix>/auth/...`, e.g. `"api"`. A `/` at either end is ignored (`"/api/"` means `"api"`), and `""` puts the routes at `/auth/...`. Also part of the Microsoft redirect URI. |
 | `SOCIAL_GOOGLE_CLIENT_ID` | For Google | a shared demo client, with a warning | Your Google OAuth client ID. |
 | `SOCIAL_MICROSOFT_CLIENT_ID` | For Microsoft | a shared demo app, with a warning | The *Application (client) ID* of your Azure app. |
 | `SOCIAL_MICROSOFT_CLIENT_SECRET` | For Microsoft | a shared demo app, with a warning | A client secret *value* of that app. Load it from the environment. |
