@@ -9,10 +9,13 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.html import escapejs
 from rest_framework_simplejwt.tokens import AccessToken
 
 from django_simple_third_party_jwt import settings as jwt_settings
 from django_simple_third_party_jwt.models import SocialAccount
+
+from .helpers import package_settings
 
 GOOGLE_VERIFY = "django_simple_third_party_jwt.serilizers.google_login.id_token.verify_oauth2_token"
 MICROSOFT_AUTH = "django_simple_third_party_jwt.views.microsoft.auth"
@@ -120,6 +123,59 @@ class GoogleLoginTests(TestCase):
         self.assertEqual(self.client.session["_auth_user_id"], str(user.pk))
         self.assertIn("access", response.json())
 
+    @mock.patch(GOOGLE_VERIFY, return_value=google_idinfo())
+    def test_json_body_works_too(self, verify):
+        """The README's fetch() snippet posts JSON, without a CSRF token."""
+        client = self.client_class(enforce_csrf_checks=True)
+        response = client.post(self.url, {"credential": "google-id-token"}, content_type="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(verify.call_args.args[0], "google-id-token")
+
+    @mock.patch(GOOGLE_VERIFY, return_value=google_idinfo())
+    def test_credential_is_checked_against_the_configured_client_id(self, verify):
+        self.post()
+
+        self.assertEqual(verify.call_args.args[2], jwt_settings.SOCIAL_GOOGLE_CLIENT_ID)
+
+
+class GoogleLoginErrorTests(TestCase):
+    """Current answers for credentials that do not check out. A 500 here is one of the
+    open decisions (it would be better as 400/401); these tests pin today's behaviour."""
+    url = "/api/auth/google/token"
+    error = {"status": "error", "detail": "Something went wrong :("}
+
+    def post(self):
+        return self.client.post(self.url, {"credential": "google-id-token"})
+
+    def test_credential_google_rejects(self):
+        with mock.patch(GOOGLE_VERIFY, side_effect=ValueError("Token expired")):
+            response = self.post()
+
+        self.assertEqual((response.status_code, response.json()), (500, self.error))
+        self.assertFalse(User.objects.exists())
+
+    def test_wrong_issuer(self):
+        with mock.patch(GOOGLE_VERIFY, return_value=dict(google_idinfo(), iss="https://evil.example")):
+            response = self.post()
+
+        self.assertEqual((response.status_code, response.json()), (500, self.error))
+        self.assertFalse(User.objects.exists())
+
+    def test_token_for_another_client_id(self):
+        with mock.patch(GOOGLE_VERIFY, return_value=dict(google_idinfo(), aud="someone-else.apps.googleusercontent.com")):
+            response = self.post()
+
+        self.assertEqual((response.status_code, response.json()), (500, self.error))
+        self.assertFalse(User.objects.exists())
+
+    def test_email_verified_flag_is_not_checked_yet(self):
+        """Open decision: an unverified address on an allowed domain still gets in."""
+        with mock.patch(GOOGLE_VERIFY, return_value=dict(google_idinfo(), email_verified=False)):
+            response = self.post()
+
+        self.assertEqual(response.status_code, 200)
+
 
 class MicrosoftLoginTests(TestCase):
     def test_sign_in_redirects_to_microsoft(self):
@@ -154,12 +210,42 @@ class MicrosoftLoginTests(TestCase):
         self.assertEqual(response.context["access_token_key"], "access_token")
         self.assertEqual(response.context["refresh_token_key"], "refresh_token")
 
+    def test_callback_page_stores_the_tokens_and_redirects(self):
+        response = self.callback()
+
+        html = response.content.decode()
+        self.assertIn(escapejs(response.context["access_token"]), html)
+        self.assertIn(escapejs(response.context["refresh_token"]), html)
+        self.assertIn("localStorage.setItem(access_token_key, access_token)", html)
+        self.assertIn("window.location.replace('%s')" % escapejs(jwt_settings.LOGIN_REDIRECT_URL), html)
+        self.assertIn("Welcome!", html)
+
+    def test_callback_uses_the_configured_storage_keys(self):
+        with package_settings(
+            MICROSOFT_JWT_REDIRECT_ACCESS_TOKEN_KEY="jwt_access",
+            MICROSOFT_JWT_REDIRECT_REFRESH_TOKEN_KEY="jwt_refresh",
+        ):
+            response = self.callback()
+
+        self.assertEqual(response.context["access_token_key"], "jwt_access")
+        self.assertEqual(response.context["refresh_token_key"], "jwt_refresh")
+
     def test_callback_reuses_existing_microsoft_account(self):
         self.callback()
         self.client.logout()
         self.callback()
 
         self.assertEqual(User.objects.filter(email="carol@gmail.com").count(), 1)
+
+    def test_callback_with_a_taken_username_gets_a_random_one(self):
+        User.objects.create_user(username="carol", email="carol@example.com")
+
+        self.callback()
+
+        new_user = SocialAccount.objects.get(provider="microsoft", unique_id="carol@gmail.com").user
+        self.assertNotEqual(new_user.username, "carol")
+        self.assertEqual(len(new_user.username), 36)  # uuid4
+        self.assertEqual(new_user.email, "carol@gmail.com")
 
     def test_callback_refuses_email_domain_outside_allow_list(self):
         response = self.callback(email="dave@example.com")
