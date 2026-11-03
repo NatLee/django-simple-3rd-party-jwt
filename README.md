@@ -26,35 +26,22 @@ No passwords to store, no OAuth plumbing to write.
 
 ## How it works
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor U as User
-    participant B as Browser
-    participant P as Google / Microsoft
-    participant D as Your Django site
-    U->>B: Click "Sign in with Google" or "Sign in with Microsoft"
-    alt Google
-        B->>P: Google sign-in popup
-        P-->>B: ID token (the "credential")
-        B->>D: POST /api/auth/google/token {credential}
-        D->>P: Check the token against Google's public keys
-    else Microsoft
-        B->>D: GET /api/auth/microsoft/signin
-        D-->>B: Redirect to Microsoft's sign-in page
-        B->>P: Sign in
-        P-->>B: Redirect to /api/auth/microsoft/callback?code=...
-        B->>D: GET /api/auth/microsoft/callback?code=...
-        D->>P: Exchange the code for tokens (client ID + secret)
-    end
-    Note over P,D: E-mail domain in VALID_REGISTER_DOMAINS? If not, stop here.<br/>Find the Django user, or create User + SocialAccount.
-    alt Google
-        D-->>B: JSON {access, refresh, access_token, refresh_token}
-    else Microsoft
-        D-->>B: Page that saves the JWTs in localStorage,<br/>then redirects to LOGIN_REDIRECT_URL
-    end
-    B->>D: Your API calls with Authorization: Bearer <access>
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/NatLee/django-simple-3rd-party-jwt/main/docs/images/login-flow-dark.png">
+    <img src="https://raw.githubusercontent.com/NatLee/django-simple-3rd-party-jwt/main/docs/images/login-flow-light.png" alt="Sequence diagram. Google: the browser opens Google's sign-in popup and gets an ID token (the credential), POSTs it to /api/auth/google/token, your site checks it with Google's keys and your client ID, checks the e-mail domain, finds or creates the user and answers 200 with access and refresh tokens. Microsoft: the browser opens /api/auth/microsoft/signin, is redirected to Microsoft, signs in, comes back to /api/auth/microsoft/callback with a code, your site swaps the code for tokens with MSAL, checks the e-mail domain, finds or creates the user, logs it into the session and answers with a page that saves the JWTs in localStorage and goes to LOGIN_REDIRECT_URL. Then the browser calls your API with Authorization: Bearer and the access token.">
+  </picture>
+</p>
+
+- **Google** happens in the page: Google's popup hands the browser an ID token (the
+  `credential`), the page POSTs it to `/api/auth/google/token`, and your site checks it
+  with Google's public keys and your client ID before answering with JSON.
+- **Microsoft** happens in redirects: `/api/auth/microsoft/signin` sends the browser to
+  Microsoft, Microsoft sends it back to `/api/auth/microsoft/callback` with a code, and your
+  site swaps that code for Microsoft tokens (with your client ID and secret). The callback
+  answers with a small page that saves the JWTs in `localStorage` and goes on to `LOGIN_REDIRECT_URL`.
+- **Both** let in only e-mail domains listed in `VALID_REGISTER_DOMAINS`, find or create
+  the Django user, and hand out a Simple JWT access/refresh pair.
 
 Each Google or Microsoft account is linked to a Django user through a small
 `SocialAccount` table (`social_account` in the database, also in the Django admin),
@@ -71,37 +58,44 @@ This also installs Django REST framework, Simple JWT, `google-auth` and `msal`
 
 ## Quick start
 
-### 1. Settings
+These steps take a Django project to a login page where both buttons work, on
+`http://localhost:8000`. Only need one provider? Skip the other one's parts.
 
-In `settings.py`:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/NatLee/django-simple-3rd-party-jwt/main/docs/images/setup-map-dark.png">
+    <img src="https://raw.githubusercontent.com/NatLee/django-simple-3rd-party-jwt/main/docs/images/setup-map-light.png" alt="What goes where. Your project: settings.py adds rest_framework and django_simple_third_party_jwt to INSTALLED_APPS, sets JWT_3RD_PREFIX = &quot;api&quot; and the Google and Microsoft client settings; urls.py includes django_simple_third_party_jwt.urls at the root and serves login.html at /login/; templates/login.html has the Google button and a link to /api/auth/microsoft/signin. Your site on http://localhost:8000 then serves /login/ and the five /api/auth/... routes, and a login gives a Simple JWT access/refresh pair for Authorization: Bearer. At the provider: Google Cloud console, an OAuth client ID of type Web application with http://localhost and http://localhost:8000 as authorized JavaScript origins, whose client ID goes into SOCIAL_GOOGLE_CLIENT_ID; Azure app registration with the redirect URI http://localhost:8000/api/auth/microsoft/callback, whose application (client) ID and client secret value go into SOCIAL_MICROSOFT_CLIENT_ID and SOCIAL_MICROSOFT_CLIENT_SECRET. The site address must match the Google origin and the callback route must match the Azure redirect URI exactly.">
+  </picture>
+</p>
+
+### 1. Register your site with Google and Microsoft
+
+The buttons only work with credentials of your own. For local testing you need:
+
+- **Google**: an OAuth client ID of type *Web application*, with `http://localhost` and
+  `http://localhost:8000` as *Authorized JavaScript origins*.
+- **Microsoft**: an Azure app registration with the redirect URI
+  `http://localhost:8000/api/auth/microsoft/callback` (platform *Web*), and a client secret.
+
+Click-by-click instructions are in [Getting credentials](#getting-credentials). The `api` in
+the redirect URI is the `JWT_3RD_PREFIX` from the next step; the two have to agree.
+
+### 2. Settings
+
+In `settings.py`, add the app, choose the URL prefix and let your API accept the JWT:
 
 ```python
-import os
-
 INSTALLED_APPS = [
     # ... Django's defaults, including "django.contrib.sessions"
     "rest_framework",
     "django_simple_third_party_jwt",
 ]
 
-# The login routes live under /<JWT_3RD_PREFIX>/auth/... (required).
+# The login routes live under /<JWT_3RD_PREFIX>/auth/... (required; no "/" at either end).
 JWT_3RD_PREFIX = "api"
 
 # Only these e-mail domains can sign in.
 VALID_REGISTER_DOMAINS = ["gmail.com", "outlook.com", "hotmail.com", "live.com"]
-
-# Credentials: see "Getting credentials" below. Keep the secret out of your code.
-SOCIAL_GOOGLE_CLIENT_ID = "<your-client-id>.apps.googleusercontent.com"
-SOCIAL_MICROSOFT_CLIENT_ID = "<your-application-client-id>"
-SOCIAL_MICROSOFT_CLIENT_SECRET = os.environ["SOCIAL_MICROSOFT_CLIENT_SECRET"]
-
-# Where the browser goes after a Microsoft login.
-LOGIN_REDIRECT_URL = "/"
-
-# Google Sign-In: let its popup talk back to your page, and send the referrer
-# when testing on http://localhost (see Google's setup guide, linked below).
-SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin-allow-popups"
-SECURE_REFERRER_POLICY = "no-referrer-when-downgrade"
 
 # Let your own API views accept the JWT.
 REST_FRAMEWORK = {
@@ -112,17 +106,46 @@ REST_FRAMEWORK = {
 }
 ```
 
-Only using one provider? Leave the other one's settings out and don't link to its routes.
-The app then logs a start-up warning about that provider's demo credentials, which you can ignore.
+For Google, add:
 
-### 2. URLs
+```python
+SOCIAL_GOOGLE_CLIENT_ID = "<your-client-id>.apps.googleusercontent.com"
+
+# Let Google's sign-in popup talk back to your page, and send the referrer
+# when testing on http://localhost (see Google's setup guide, linked below).
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin-allow-popups"
+SECURE_REFERRER_POLICY = "no-referrer-when-downgrade"
+```
+
+For Microsoft, add the following, and keep the secret out of your code:
+
+```python
+import os
+
+SOCIAL_MICROSOFT_CLIENT_ID = "<your-application-client-id>"
+SOCIAL_MICROSOFT_CLIENT_SECRET = os.environ["SOCIAL_MICROSOFT_CLIENT_SECRET"]
+
+# Where the browser goes after a Microsoft login: the page from step 4.
+LOGIN_REDIRECT_URL = "/login/"
+```
+
+```bash
+export SOCIAL_MICROSOFT_CLIENT_SECRET="<your-client-secret-value>"   # before runserver
+```
+
+Left one provider out? The app logs a start-up warning about that provider's demo
+credentials, which you can ignore as long as you don't link to its routes.
+
+### 3. URLs
 
 In your project's `urls.py`, include the app **at the root**. The `api/` part comes
 from `JWT_3RD_PREFIX`, so don't put it in `path()` as well (that gives `/api/api/auth/...`).
-The Simple JWT views let the frontend refresh and check tokens.
+The Simple JWT views let the frontend refresh and check tokens, and the last line serves
+the login page from step 4.
 
 ```python
 from django.urls import include, path
+from django.views.generic import TemplateView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 
 urlpatterns = [
@@ -131,19 +154,11 @@ urlpatterns = [
     path("api/auth/token", TokenObtainPairView.as_view(), name="token_get"),  # optional: username/password login
     path("api/auth/token/refresh", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/token/verify", TokenVerifyView.as_view(), name="token_verify"),
+    path("login/", TemplateView.as_view(template_name="login.html"), name="login"),
 ]
 ```
 
-### 3. Migrate and run
-
-```bash
-python manage.py migrate
-python manage.py runserver
-```
-
-Run the full `migrate`: the app's own table *and* Django's session table are needed.
-
-You now have these routes:
+That gives you these routes:
 
 | Route | Name | What it does |
 |---|---|---|
@@ -153,12 +168,16 @@ You now have these routes:
 | `GET /api/auth/microsoft/callback` | `microsoft-callback` | Microsoft sends the browser back here; logs in and hands over the JWTs |
 | `GET /api/auth/microsoft/signout` | `microsoft-signout` | Forgets the Microsoft token cache, then goes to sign-in |
 
-### 4. Frontend
+### 4. Login page
 
-A plain HTML page is enough. Google's script turns the `g_id_onload` div into a
-sign-in button and calls your function with the credential:
+A plain HTML page is enough. Save it as `templates/login.html` next to `manage.py`, and
+tell Django to look in that folder: in `settings.py`, set `"DIRS": [BASE_DIR / "templates"]`
+in `TEMPLATES`. Google's script turns the `g_id_onload` div into a sign-in button and
+calls your function with the credential:
 
 ```html
+<!doctype html>
+<title>Sign in</title>
 <script src="https://accounts.google.com/gsi/client" async></script>
 
 <div id="g_id_onload"
@@ -166,7 +185,8 @@ sign-in button and calls your function with the credential:
      data-callback="onGoogleCredential"></div>
 <div class="g_id_signin" data-type="standard"></div>
 
-<a href="/api/auth/microsoft/signin">Sign in with Microsoft</a>
+<p><a href="/api/auth/microsoft/signin">Sign in with Microsoft</a></p>
+<p id="status"></p>
 
 <script>
   async function onGoogleCredential({ credential }) {
@@ -183,6 +203,7 @@ sign-in button and calls your function with the credential:
     // The same keys the Microsoft callback page uses by default.
     localStorage.setItem("access_token", access);
     localStorage.setItem("refresh_token", refresh);
+    showStatus();
   }
 
   // Later, call your API with the token:
@@ -191,11 +212,65 @@ sign-in button and calls your function with the credential:
       headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` },
     });
   }
+
+  // Microsoft comes back to this page (LOGIN_REDIRECT_URL) with the tokens already stored.
+  function showStatus() {
+    const token = localStorage.getItem("access_token");
+    document.getElementById("status").textContent =
+      token ? "Signed in. Access token: " + token.slice(0, 24) + "…" : "Not signed in yet.";
+  }
+  showStatus();
 </script>
 ```
 
 The login endpoints need no CSRF token. In a Django template you can render the client
 ID from `settings.SOCIAL_GOOGLE_CLIENT_ID` instead of typing it twice.
+
+### 5. Migrate and run
+
+```bash
+python manage.py migrate
+python manage.py runserver
+```
+
+Run the full `migrate`: the app's own table *and* Django's session table are needed.
+
+Then open <http://localhost:8000/login/>. Use `localhost`, not `127.0.0.1`: Google only
+accepts the origins you registered, and the Microsoft redirect URI is built from the
+address in your browser.
+
+### 6. Check that it works
+
+Sign in with either button. The page then says `Signed in. Access token: eyJhbGciOi…`
+(with Microsoft, after a short "Welcome!" page). To check a token by hand, copy it from
+the browser's `localStorage` (developer tools → Application) and ask Simple JWT:
+
+```bash
+curl -i -X POST http://localhost:8000/api/auth/token/verify -d "token=<access token>"
+```
+
+`200` with `{}` means the token is valid; anything else answers `401` with
+`"code": "token_not_valid"`.
+
+Your own views see the signed-in user once the request carries the token. For example,
+in a `views.py` next to `urls.py`:
+
+```python
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def me(request):
+    return Response({"username": request.user.username, "email": request.user.email})
+```
+
+Add `path("api/me", views.me)` to `urlpatterns` (with `from . import views`), then
+`callApi("/api/me")` in the page, or
+`curl -H "Authorization: Bearer <access token>" http://localhost:8000/api/me`, answers
+with the user. Without the token it is `401`.
 
 What the Google endpoint answers:
 
@@ -211,11 +286,27 @@ After a Microsoft login, the callback page shows a short "Welcome!" and redirect
 The user is also logged into the Django session.
 If the domain is not allowed, it says so in red and stores nothing.
 
+## Troubleshooting
+
+| What you see | What to do |
+|---|---|
+| `ImproperlyConfigured: … needs JWT_3RD_PREFIX` at start-up | Add `JWT_3RD_PREFIX = "api"` to `settings.py`. |
+| Warning `django_simple_third_party_jwt.W001` or `W002` at start-up | The prefix is empty or has a `/` at one end, so the routes are not where you expect them. Use `"api"`, and register the matching redirect URI in Azure. |
+| `KeyError: 'SOCIAL_MICROSOFT_CLIENT_SECRET'` at start-up | Export the variable before `runserver`, or leave the Microsoft block out. |
+| 404 at `/api/api/auth/...` | You included the app under `path("api/", ...)`. Include it at the root, `path("", ...)`. |
+| `no such table: django_session` (or `social_account`), or `NOT NULL constraint failed: auth_user.last_login` | The database is not fully migrated. Run the full `python manage.py migrate`, not just this app. |
+| The Google button reports that the origin is not allowed | Add the page's exact origin (scheme, host and port) to the client's *Authorized JavaScript origins*, and open the page at that address. |
+| The Google endpoint answers `401` "This email is invalid." | The address's domain is not in `VALID_REGISTER_DOMAINS`. |
+| The Google endpoint answers `500` "Something went wrong :(" | Google did not accept the credential, often because `SOCIAL_GOOGLE_CLIENT_ID` is not the client ID in your page. The server log says why. |
+| Microsoft shows an `AADSTS50011` redirect URI error | Register exactly the redirect URI the error shows (usually `http://localhost:8000/api/auth/microsoft/callback`), and browse the site at that host. |
+| The callback page says "There are something went wrong! :(" | The server log has Microsoft's reason. `invalid_client` with `AADSTS7000215` means `SOCIAL_MICROSOFT_CLIENT_SECRET` holds the secret's ID instead of its value, or an expired secret. (Up to 0.3.2 the log only says `'access_token'`.) |
+| The callback page says "You are not allowed to access this! :(" | The account's domain is not in `VALID_REGISTER_DOMAINS`, or its name is not an e-mail address. |
+
 ## Settings reference
 
 | Setting | Required | Default | What it does |
 |---|---|---|---|
-| `JWT_3RD_PREFIX` | **Yes** | none: start-up error | URL prefix for every route: `/<prefix>/auth/...`. No leading or trailing slash, e.g. `"api"`. Also part of the Microsoft redirect URI. |
+| `JWT_3RD_PREFIX` | **Yes** | none: start-up error | URL prefix for every route: `/<prefix>/auth/...`. No leading or trailing slash, e.g. `"api"` (`manage.py check` warns otherwise). Also part of the Microsoft redirect URI. |
 | `SOCIAL_GOOGLE_CLIENT_ID` | For Google | a shared demo client, with a warning | Your Google OAuth client ID. |
 | `SOCIAL_MICROSOFT_CLIENT_ID` | For Microsoft | a shared demo app, with a warning | The *Application (client) ID* of your Azure app. |
 | `SOCIAL_MICROSOFT_CLIENT_SECRET` | For Microsoft | a shared demo app, with a warning | A client secret *value* of that app. Load it from the environment. |

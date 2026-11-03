@@ -1,0 +1,152 @@
+<!doctype html>
+<!--
+  "How it works" diagram for the README. Render the light and dark versions (#dark picks the dark
+  theme) with a Chromium-based browser, e.g.
+    msedge --headless=new --hide-scrollbars --force-device-scale-factor=2 --window-size=960,826
+           --default-background-color=00000000 --virtual-time-budget=5000
+           --screenshot=login-flow-dark.png "file:///…/login-flow.html#dark"
+  then shrink the PNGs, e.g. magick login-flow-dark.png -strip -dither None -colors 256 login-flow-dark.png
+  The steps follow the code: views/google/login.py + serilizers/google_login.py (Google),
+  views/microsoft/auth.py + msal_helpers.py (Microsoft), utils/accounts.py and
+  utils/get_tokens_for_user.py (user and tokens), with JWT_3RD_PREFIX = "api" as in the README.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Login flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=block" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f6f8fa; --ink: #1f2328; --muted: #59636e; --line: #d1d9e0; --card: #ffffff;
+    --blue: #0969da; --green: #1a7f37; --purple: #8250df; --orange: #bc4c00;
+    --shadow: 0 1px 2px rgba(31,35,40,.06), 0 6px 18px rgba(31,35,40,.06);
+    --life: #d1d9e0; --band-g: rgba(9,105,218,.045); --band-m: rgba(130,80,223,.05);
+  }
+  .dark {
+    --bg: #0d1117; --bg2: #151b23; --ink: #f0f6fc; --muted: #9198a1; --line: #3d444d; --card: #151b23;
+    --blue: #4493f8; --green: #3fb950; --purple: #ab7df8; --orange: #f0883e;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    --life: #3d444d; --band-g: rgba(68,147,248,.07); --band-m: rgba(171,125,248,.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; }
+  body { width: 960px; font-family: Inter, "Segoe UI", sans-serif; color: var(--ink); }
+  .frame { position: relative; width: 960px; border-radius: 22px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); }
+  svg { position: absolute; left: 0; top: 0; }
+  .life { stroke: var(--life); stroke-width: 2; stroke-dasharray: 2 6; stroke-linecap: round; }
+  .head { position: absolute; top: 22px; width: 190px; margin-left: -95px; text-align: center; padding: 10px 0;
+          background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+          font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+  .head small { display: block; font-weight: 500; font-size: 11.5px; color: var(--muted); margin-top: 2px; letter-spacing: 0; }
+  .band { position: absolute; left: 14px; right: 14px; border-radius: 14px; }
+  .band .tag { position: absolute; left: 14px; top: 10px; font-size: 11px; font-weight: 700; letter-spacing: .12em;
+               text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .band .tag i { width: 8px; height: 8px; border-radius: 50%; }
+  .lab { position: absolute; transform: translateX(-50%); white-space: nowrap; font-size: 13px; color: var(--ink);
+         padding: 0 6px; display: flex; align-items: center; gap: 7px; }
+  .lab.below { color: var(--muted); font-size: 12px; }
+  .num { display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; color: #fff;
+         font-size: 11px; font-weight: 700; flex: none; }
+  code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 12.5px; }
+  .lab.below code { font-size: 11.5px; }
+  .note { position: absolute; transform: translateX(-50%); white-space: nowrap; padding: 6px 12px; border-radius: 10px;
+          border: 1px solid var(--line); background: var(--card); box-shadow: var(--shadow); font-size: 12.5px;
+          display: flex; align-items: center; gap: 7px; }
+  .note code { font-size: 11.5px; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<script>if (location.hash === '#dark') document.documentElement.className = 'dark';</script>
+<div class="frame" id="frame"></div>
+<script>
+// Lifelines: P = Google / Microsoft, B = the browser, D = your Django site.
+const X = { P: 150, B: 450, D: 760 };
+const ROW = 36, TOP = 96;
+const steps = [
+  { band: "Google", color: "blue" },
+  { from: "B", to: "P", text: "Sign in with Google (popup)" },
+  { from: "P", to: "B", text: "ID token, the <code>credential</code>", reply: true },
+  { from: "B", to: "D", text: "<code>POST /api/auth/google/token</code>", below: '<code>{"credential": "…"}</code>' },
+  { from: "D", to: "P", text: "checks the ID token with Google's keys and your client ID" },
+  { self: "D", text: "e-mail domain in <code>VALID_REGISTER_DOMAINS</code> → find or create the <code>User</code>" },
+  { from: "D", to: "B", text: '<code>200</code> JSON <code>{"access", "refresh", …}</code>', jwt: true, reply: true },
+  { band: "Microsoft", color: "purple" },
+  { from: "B", to: "D", text: "<code>GET /api/auth/microsoft/signin</code>" },
+  { from: "D", to: "B", text: "redirect to Microsoft's sign-in page", reply: true },
+  { from: "B", to: "P", text: "the user signs in" },
+  { from: "P", to: "B", text: "redirect back with a <code>code</code>", reply: true },
+  { from: "B", to: "D", text: "<code>GET …/microsoft/callback?code=…</code>" },
+  { from: "D", to: "P", text: "swaps the code for tokens (MSAL, your client ID + secret)" },
+  { self: "D", text: "e-mail domain allowed → find or create the <code>User</code>, session login" },
+  { from: "D", to: "B", text: "page saves the JWTs in <code>localStorage</code>", below: "then goes to <code>LOGIN_REDIRECT_URL</code>", jwt: true, reply: true },
+  { band: "Then, either way", color: "green" },
+  { from: "B", to: "D", text: "your API, with <code>Authorization: Bearer &lt;access&gt;</code>", jwt: true, noNum: true },
+];
+
+const frame = document.getElementById("frame");
+const ns = "http://www.w3.org/2000/svg";
+const svg = document.createElementNS(ns, "svg");
+let y = TOP, n = 0, bandStart = null, bandEl = null, html = "";
+const bands = [];
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const add = (tag, attrs) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); svg.appendChild(e); return e; };
+
+// y: where the next arrow goes; bottom: lowest pixel drawn so far in the current band.
+let bottom = TOP - 40;
+const closeBand = () => { if (bandEl) bandEl.style.height = (bottom + 14 - bandStart) + "px"; };
+for (const s of steps) {
+  if (s.band) {
+    closeBand();
+    bandStart = bandEl ? bottom + 26 : TOP; y = bandStart + 34 + 14;
+    bandEl = document.createElement("div");
+    bandEl.className = "band";
+    bandEl.style.top = bandStart + "px";
+    bandEl.style.background = css(s.color === "blue" ? "--band-g" : s.color === "purple" ? "--band-m" : "--bg2");
+    bandEl.innerHTML = `<div class="tag"><i style="background:var(--${s.color})"></i>${s.band}</div>`;
+    frame.appendChild(bandEl);
+    var color = s.color;
+    n = 0;
+    continue;
+  }
+  n += 1;
+  const c = s.jwt ? "green" : (s.self ? "orange" : color);
+  const num = s.noNum ? "" : `<span class="num" style="background:var(--${c})">${n}</span>`;
+  if (s.self) {
+    html += `<div class="note" style="left:${X[s.self] - 60}px; top:${y - 22}px">${num}${s.text}</div>`;
+    bottom = y + 10;
+    y += ROW + 12;
+    continue;
+  }
+  const x1 = X[s.from], x2 = X[s.to], dir = Math.sign(x2 - x1);
+  add("line", { x1: x1 + dir * 4, y1: y, x2: x2 - dir * 10, y2: y, stroke: css("--" + c), "stroke-width": 2,
+                "stroke-dasharray": s.reply ? "6 5" : "none" });
+  add("path", { d: `M${x2 - dir * 2} ${y} l${-dir * 10} -5 v10 z`, fill: css("--" + c) });
+  add("circle", { cx: x1, cy: y, r: 4, fill: css("--" + c) });
+  const mid = (x1 + x2) / 2;
+  html += `<div class="lab" style="left:${mid}px; top:${y - 25}px">${num}${s.text}</div>`;
+  bottom = y + 6;
+  if (s.below) { html += `<div class="lab below" style="left:${mid}px; top:${y + 5}px">${s.below}</div>`; bottom = y + 22; y += 16; }
+  y += ROW;
+}
+closeBand();
+const H = bottom + 14 + 14;
+frame.style.height = H + "px";
+document.body.style.height = H + "px";
+svg.setAttribute("width", 960); svg.setAttribute("height", H);
+// lifelines behind everything
+for (const k in X) {
+  const l = document.createElementNS(ns, "line");
+  Object.entries({ x1: X[k], y1: 70, x2: X[k], y2: H - 12, class: "life" }).forEach(([a, v]) => l.setAttribute(a, v));
+  svg.insertBefore(l, svg.firstChild);
+}
+frame.appendChild(svg);
+frame.insertAdjacentHTML("beforeend", html +
+  `<div class="head" style="left:${X.P}px">Google / Microsoft<small>the sign-in provider</small></div>
+   <div class="head" style="left:${X.B}px">Browser<small>your page</small></div>
+   <div class="head" style="left:${X.D}px">Your Django site<small>this app, under <code>/api/auth/</code></small></div>`);
+document.title = "Login flow " + H;
+</script>
+</body>
+</html>

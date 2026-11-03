@@ -274,6 +274,23 @@ class MicrosoftLoginTests(TestCase):
         self.assertEqual(response.context["description"], "There are something went wrong! :(")
         self.assertFalse(User.objects.exists())
 
+    def test_callback_logs_why_microsoft_refused_the_code(self):
+        """A wrong client secret used to show up in the log as just access_token."""
+        refusal = {
+            "error": "invalid_client",
+            "error_description": "AADSTS7000215: Invalid client secret provided.",
+        }
+        with mock.patch(f"{MICROSOFT_AUTH}.get_token_from_code", return_value=refusal),                 mock.patch(f"{MICROSOFT_AUTH}.get_user") as get_user,                 self.assertLogs(MICROSOFT_AUTH, "ERROR") as logs:
+            response = self.client.get("/api/auth/microsoft/callback", {"code": "c"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["access_token"], "")
+        self.assertEqual(response.context["description"], "There are something went wrong! :(")
+        self.assertIn("invalid_client", logs.output[0])
+        self.assertIn("AADSTS7000215: Invalid client secret provided.", logs.output[0])
+        get_user.assert_not_called()
+        self.assertFalse(User.objects.exists())
+
     def test_sign_out_clears_microsoft_token_cache(self):
         session = self.client.session
         session["token_cache"] = "{}"
