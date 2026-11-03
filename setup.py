@@ -64,8 +64,8 @@ setuptools.setup(
         'django>=4.0.0',
         'djangorestframework',
         'djangorestframework-simplejwt>=5.0.0',
-        'requests',
-        'google-auth', # Google Authentication Library
+        # Google Authentication Library, with the HTTP transport it uses to fetch Google's keys
+        'google-auth[requests]',
         'msal', # Microsoft Authentication Library
     ],
     extras_require={

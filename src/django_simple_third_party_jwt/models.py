@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.conf import settings
 from django.db import models
 
 
@@ -25,9 +25,9 @@ class SocialAccount(models.Model):
         max_length=200,
     )
 
-    # 關聯到 Django 內建的 User 模型（一對多）
+    # 關聯到專案的使用者模型（AUTH_USER_MODEL，沒設定時是 Django 內建的 User；一對多）
     user = models.ForeignKey(
-        User,
+        settings.AUTH_USER_MODEL,
         verbose_name="使用者",
         related_name="social",
         on_delete=models.CASCADE,
@@ -39,4 +39,4 @@ class SocialAccount(models.Model):
         verbose_name = "第三方登入（3rd party login）"
 
     def __str__(self) -> str:
-        return f"{self.user.username} - {self.provider}"
+        return f"{self.user.get_username()} - {self.provider}"

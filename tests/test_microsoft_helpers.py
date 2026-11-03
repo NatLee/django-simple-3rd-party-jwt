@@ -1,4 +1,4 @@
-"""The thin wrappers around MSAL (Microsoft's auth library) and Microsoft Graph.
+"""The thin wrappers around MSAL (Microsoft's auth library).
 MSAL and the HTTP calls are mocked; nothing here talks to Microsoft."""
 from unittest import mock
 
@@ -7,7 +7,6 @@ from django.conf import settings
 from django.test import RequestFactory, SimpleTestCase
 
 from django_simple_third_party_jwt.views.microsoft import msal_helpers
-from django_simple_third_party_jwt.views.microsoft import utils as graph
 
 APP = "django_simple_third_party_jwt.views.microsoft.msal_helpers.msal.ConfidentialClientApplication"
 
@@ -38,7 +37,7 @@ class MsalAppTests(SimpleTestCase):
 
         self.assertEqual(flow, {"auth_uri": "https://login"})
         app.return_value.initiate_auth_code_flow.assert_called_once_with(
-            ["user.read"], redirect_uri="http://testserver/sub/api/auth/microsoft/callback"
+            ["user.read", "email"], redirect_uri="http://testserver/sub/api/auth/microsoft/callback"
         )
 
     @mock.patch(APP)
@@ -47,7 +46,7 @@ class MsalAppTests(SimpleTestCase):
         msal_helpers.get_sign_in_flow("http://testserver/")
 
         app.return_value.initiate_auth_code_flow.assert_called_once_with(
-            ["user.read"], redirect_uri="http://testserver/api/auth/microsoft/callback"
+            ["user.read", "email"], redirect_uri="http://testserver/api/auth/microsoft/callback"
         )
 
     @mock.patch(APP)
@@ -82,7 +81,7 @@ class MsalAppTests(SimpleTestCase):
         app.return_value.acquire_token_silent.return_value = {"access_token": "fresh"}
 
         self.assertEqual(msal_helpers.get_token(request_with_session()), "fresh")
-        app.return_value.acquire_token_silent.assert_called_once_with(["user.read"], account="account-1")
+        app.return_value.acquire_token_silent.assert_called_once_with(["user.read", "email"], account="account-1")
 
 
 class TokenCacheTests(SimpleTestCase):
@@ -109,15 +108,3 @@ class TokenCacheTests(SimpleTestCase):
         self.assertEqual(request.session, {"other": 1})
         msal_helpers.remove_user_and_token(request)  # nothing left to remove: no error
 
-
-class GraphTests(SimpleTestCase):
-    @mock.patch("django_simple_third_party_jwt.views.microsoft.utils.requests.get")
-    def test_get_user_calls_graph_me_with_the_bearer_token(self, get):
-        get.return_value.json.return_value = {"displayName": "Carol"}
-
-        self.assertEqual(graph.get_user("graph-token"), {"displayName": "Carol"})
-        get.assert_called_once_with(
-            "https://graph.microsoft.com/v1.0/me",
-            headers={"Authorization": "Bearer graph-token"},
-            params={"$select": "displayName"},
-        )

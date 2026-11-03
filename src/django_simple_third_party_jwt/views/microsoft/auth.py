@@ -6,14 +6,16 @@ the JWTs into the browser's localStorage and then redirects to LOGIN_REDIRECT_UR
 from __future__ import annotations
 
 import logging
+from typing import Any, Dict, Optional
 
 from django.contrib.auth import login
-from django.contrib.auth.models import User
+from django.contrib.auth.base_user import AbstractBaseUser
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 
 from django_simple_third_party_jwt import settings as jwt_settings
+from django_simple_third_party_jwt.exception import InvalidEmailError, LoginRefused
 from django_simple_third_party_jwt.utils.accounts import get_or_create_social_user, split_email
 from django_simple_third_party_jwt.utils.get_tokens_for_user import get_tokens_for_user
 from django_simple_third_party_jwt.views.microsoft.msal_helpers import (
@@ -21,15 +23,28 @@ from django_simple_third_party_jwt.views.microsoft.msal_helpers import (
     get_token_from_code,
     remove_user_and_token,
 )
-from django_simple_third_party_jwt.views.microsoft.utils import get_user
 
 logger = logging.getLogger(__name__)
 
 TEMPLATE = "microsoft/index.html"
 
+# Microsoft's tenant ID for personal Microsoft accounts (outlook.com, hotmail.com, live.com, ...).
+# Microsoft verifies these accounts' e-mail addresses itself.
+PERSONAL_ACCOUNTS_TENANT_ID = "9188040d-6c67-4c5b-b112-36a304b66dad"
 
-def sign_in(request: HttpRequest) -> HttpResponseRedirect:
+NOT_ALLOWED = "Sorry, this account is not allowed to sign in here."
+NO_VERIFIED_EMAIL = "Sorry, Microsoft has not confirmed an e-mail address for this account."
+FAILED = "Something went wrong while signing in with Microsoft. Please try again."
+NOT_SET_UP = "Microsoft sign-in is not set up on this site."
+
+
+def sign_in(request: HttpRequest) -> HttpResponse:
     """Start the sign-in flow and send the browser to Microsoft."""
+    missing = jwt_settings.missing_microsoft_credentials()
+    if missing:
+        # manage.py check has said so already (W002); here the visitor gets a page, not a 500.
+        logger.error("[AUTH][MICROSOFT] Microsoft sign-in is not set up: set %s", ", ".join(missing))
+        return _render_page(request, email="", description=NOT_SET_UP)
     flow = get_sign_in_flow(redirect_uri=request.build_absolute_uri(reverse("microsoft-callback")))
     try:
         request.session["auth_flow"] = flow
@@ -43,6 +58,28 @@ def sign_out(request: HttpRequest) -> HttpResponseRedirect:
     return HttpResponseRedirect(reverse("microsoft-signin"))
 
 
+def account_id(claims: Dict[str, Any]) -> str:
+    """The account's immutable ID: tenant ID and object ID, the pair Microsoft recommends.
+
+    preferred_username and email can be changed by whoever runs the account, so they never
+    decide who the user is.
+    """
+    return f"{claims['tid']}/{claims['oid']}"
+
+
+def verified_email(claims: Dict[str, Any]) -> Optional[str]:
+    """The e-mail address in the ID token, if Microsoft vouches for it; otherwise None.
+
+    Personal accounts: Microsoft verifies the address. Work and school accounts: only when the
+    token says the domain's owner is verified (xms_edov), which, like the email claim itself,
+    is an optional claim to switch on in the app registration's token configuration.
+    """
+    email = claims.get("email")
+    if email and (claims.get("tid") == PERSONAL_ACCOUNTS_TENANT_ID or claims.get("xms_edov") is True):
+        return email
+    return None
+
+
 def callback(request: HttpRequest) -> HttpResponse:
     """Where Microsoft sends the browser back to after sign-in."""
     try:
@@ -53,27 +90,18 @@ def callback(request: HttpRequest) -> HttpResponse:
                 "[AUTH][MICROSOFT] Microsoft refused the sign-in: %s: %s",
                 result["error"], result.get("error_description", ""),
             )
-            return render_error(request, "")
-        access_token = result["access_token"]
-        email = result["id_token_claims"]["preferred_username"]
+            return _render_page(request, email="", description=FAILED)
+        claims = result["id_token_claims"]
+        unique_id = account_id(claims)
     except Exception as e:
         logger.error("[AUTH][MICROSOFT] %s", e)
-        return render_error(request, "")
+        return _render_page(request, email="", description=FAILED)
 
-    # The Graph profile is fetched but not stored (yet).
-    get_user(access_token)
-
+    email = verified_email(claims) or ""
     try:
-        username, domain = split_email(email)
-    except ValueError:
-        # preferred_username is not always an e-mail (it can be a phone number, for one).
-        logger.warning("[AUTH][MICROSOFT] `%s` is not an e-mail address", email)
-        return render_error(request, email)
-    if domain not in jwt_settings.VALID_REGISTER_DOMAINS:
-        logger.warning("[AUTH][MICROSOFT] `%s` attempts to register!!", email)
-        return render_error(request, email)
-
-    user = get_or_create_user(email, username)
+        user = get_or_create_user(unique_id, email, claims)
+    except LoginRefused as refusal:
+        return _render_page(request, email=email, description=refusal.detail)
     login(request, user)
     tokens = get_tokens_for_user(user)
     return _render_page(
@@ -85,18 +113,30 @@ def callback(request: HttpRequest) -> HttpResponse:
     )
 
 
-def get_or_create_user(email: str, username: str) -> User:
-    """The user linked to this Microsoft account (keyed by its e-mail), created on first login."""
-    return get_or_create_social_user("microsoft", email, email=email, username=username)
+def get_or_create_user(unique_id: str, email: str, claims: Dict[str, Any]) -> AbstractBaseUser:
+    """The user linked to this Microsoft account, created on first login.
 
-
-def render_error(request: HttpRequest, email: str) -> HttpResponse:
-    """The callback page without tokens: "not allowed" when we know who it was."""
-    if email:
-        description = "Sorry, this account is not allowed to sign in here."
-    else:
-        description = "Something went wrong while signing in with Microsoft. Please try again."
-    return _render_page(request, email=email, description=description)
+    Raises LoginRefused when Microsoft does not vouch for an address, or its domain is not in
+    VALID_REGISTER_DOMAINS. Up to 0.4.0 accounts were keyed by preferred_username; such a
+    record is found through the verified address and keyed by `unique_id` from then on.
+    """
+    if not email:
+        logger.warning(
+            "[AUTH][MICROSOFT] No verified e-mail address for `%s` (%s). Work and school accounts "
+            "need the optional claims email and xms_edov in the app's token configuration.",
+            claims.get("preferred_username", ""), unique_id,
+        )
+        raise LoginRefused(NO_VERIFIED_EMAIL)
+    try:
+        username, domain = split_email(email)
+    except ValueError:
+        raise InvalidEmailError(NOT_ALLOWED) from None
+    if domain not in jwt_settings.VALID_REGISTER_DOMAINS:
+        logger.warning("[AUTH][MICROSOFT] `%s` attempts to register!!", email)
+        raise InvalidEmailError(NOT_ALLOWED)
+    return get_or_create_social_user(
+        "microsoft", unique_id, email=email, username=username, previous_ids=[email],
+    )
 
 
 def _render_page(

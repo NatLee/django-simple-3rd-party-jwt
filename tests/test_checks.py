@@ -3,7 +3,9 @@ from django.conf import settings
 from django.core import checks
 from django.test import SimpleTestCase, override_settings
 
-from django_simple_third_party_jwt.checks import check_jwt_3rd_prefix
+from django_simple_third_party_jwt.checks import check_jwt_3rd_prefix, check_microsoft_credentials
+
+from .helpers import package_settings
 
 
 class PrefixCheckTests(SimpleTestCase):
@@ -43,3 +45,29 @@ class PrefixCheckTests(SimpleTestCase):
         with override_settings(JWT_3RD_PREFIX="api/"):
             ids = [message.id for message in checks.run_checks(tags=[checks.Tags.urls])]
         self.assertIn("django_simple_third_party_jwt.W001", ids)
+
+
+class MicrosoftCredentialsCheckTests(SimpleTestCase):
+    """No shared demo app for Microsoft any more: say what to set before anyone signs in."""
+
+    def test_set_credentials_are_fine(self):
+        self.assertEqual(check_microsoft_credentials(None), [])
+
+    def test_missing_credentials_are_named(self):
+        cases = [
+            (["SOCIAL_MICROSOFT_CLIENT_SECRET"], "SOCIAL_MICROSOFT_CLIENT_SECRET"),
+            (["SOCIAL_MICROSOFT_CLIENT_ID", "SOCIAL_MICROSOFT_CLIENT_SECRET"],
+             "SOCIAL_MICROSOFT_CLIENT_ID, SOCIAL_MICROSOFT_CLIENT_SECRET"),
+        ]
+        for remove, named in cases:
+            with self.subTest(remove), package_settings(remove=remove):
+                [warning] = check_microsoft_credentials(None)
+            self.assertIsInstance(warning, checks.Warning)
+            self.assertEqual(warning.id, "django_simple_third_party_jwt.W002")
+            self.assertIn(f"not set: {named}.", warning.msg)
+            self.assertIn("SILENCED_SYSTEM_CHECKS", warning.hint)
+
+    def test_the_check_is_registered_with_django(self):
+        with package_settings(remove=["SOCIAL_MICROSOFT_CLIENT_SECRET"]):
+            ids = [message.id for message in checks.run_checks()]
+        self.assertIn("django_simple_third_party_jwt.W002", ids)

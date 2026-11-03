@@ -34,10 +34,13 @@ class DefaultsTests(SimpleTestCase):
                 )
                 self.assertEqual(conf.MICROSOFT_JWT_REDIRECT_ACCESS_TOKEN_KEY, "access_token")
                 self.assertEqual(conf.MICROSOFT_JWT_REDIRECT_REFRESH_TOKEN_KEY, "refresh_token")
-                # Shared demo credentials are filled in (values deliberately not compared).
+                # Google falls back to a shared demo client (its ID is public anyway)...
                 self.assertTrue(conf.SOCIAL_GOOGLE_CLIENT_ID.endswith(".apps.googleusercontent.com"))
-                self.assertTrue(conf.SOCIAL_MICROSOFT_CLIENT_ID)
-                self.assertTrue(conf.SOCIAL_MICROSOFT_CLIENT_SECRET)
+                # ...Microsoft to nothing: the demo app's secret was public (the user's decision,
+                # 2026-11-04). manage.py check says what to set (tests/test_checks.py).
+                self.assertIsNone(conf.SOCIAL_MICROSOFT_CLIENT_ID)
+                self.assertIsNone(conf.SOCIAL_MICROSOFT_CLIENT_SECRET)
+                self.assertEqual(conf.missing_microsoft_credentials(), list(CREDENTIAL_SETTINGS[1:]))
 
     def test_project_settings_win_over_defaults(self):
         with package_settings(
@@ -53,16 +56,11 @@ class DefaultsTests(SimpleTestCase):
 
 
 class DemoCredentialWarningTests(SimpleTestCase):
-    def test_each_missing_credential_logs_a_warning(self):
-        for name, words in (
-            ("SOCIAL_GOOGLE_CLIENT_ID", "default Google client ID"),
-            ("SOCIAL_MICROSOFT_CLIENT_ID", "default Microsoft client ID"),
-            ("SOCIAL_MICROSOFT_CLIENT_SECRET", "default Microsoft client secret"),
-        ):
-            with self.subTest(name), self.assertLogs(LOGGER, "WARNING") as logs:
-                with package_settings(remove=[name]):
-                    pass
-            self.assertTrue(any(words in line for line in logs.output), logs.output)
+    def test_a_missing_google_client_id_logs_a_warning(self):
+        with self.assertLogs(LOGGER, "WARNING") as logs:
+            with package_settings(remove=["SOCIAL_GOOGLE_CLIENT_ID"]):
+                pass
+        self.assertTrue(any("default Google client ID" in line for line in logs.output), logs.output)
 
     def test_own_credentials_do_not_warn(self):
         # tests/settings.py has placeholder Microsoft credentials; give Google one too.

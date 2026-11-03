@@ -1,4 +1,4 @@
-"""Start-up checks (run by `manage.py check` and `runserver`) for JWT_3RD_PREFIX."""
+"""Start-up checks (run by `manage.py check` and `runserver`) for the package's settings."""
 from __future__ import annotations
 
 from typing import Any, List
@@ -6,6 +6,7 @@ from typing import Any, List
 from django.conf import settings
 from django.core import checks
 
+from django_simple_third_party_jwt import settings as jwt_settings
 from django_simple_third_party_jwt.settings import auth_route, clean_prefix
 
 
@@ -37,5 +38,28 @@ def check_jwt_3rd_prefix(app_configs: Any, **kwargs: Any) -> List[checks.CheckMe
                 "that has the '//'."
             ),
             id="django_simple_third_party_jwt.W001",
+        )
+    ]
+
+
+@checks.register()
+def check_microsoft_credentials(app_configs: Any, **kwargs: Any) -> List[checks.CheckMessage]:
+    """Say which Microsoft credentials are missing, before anyone tries to sign in.
+
+    There is no shared demo app for Microsoft (its secret was public), so without them the
+    Microsoft routes only show a "not set up" page.
+    """
+    missing = jwt_settings.missing_microsoft_credentials()
+    if not missing:
+        return []
+    return [
+        checks.Warning(
+            f"Microsoft sign-in is not set up: not set: {', '.join(missing)}.",
+            hint=(
+                f"Register an app at {jwt_settings.AZURE_APP_REGISTRATIONS_PAGE} and set both "
+                "(README: Getting credentials). Only using Google? Add "
+                "'django_simple_third_party_jwt.W002' to SILENCED_SYSTEM_CHECKS."
+            ),
+            id="django_simple_third_party_jwt.W002",
         )
     ]
