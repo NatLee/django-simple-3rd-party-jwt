@@ -8,12 +8,13 @@ from __future__ import annotations
 import logging
 
 from django.contrib.auth import login
-from django.contrib.auth.models import User
+from django.contrib.auth.base_user import AbstractBaseUser
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 
 from django_simple_third_party_jwt import settings as jwt_settings
+from django_simple_third_party_jwt.exception import LoginRefused
 from django_simple_third_party_jwt.utils.accounts import get_or_create_social_user, split_email
 from django_simple_third_party_jwt.utils.get_tokens_for_user import get_tokens_for_user
 from django_simple_third_party_jwt.views.microsoft.msal_helpers import (
@@ -73,7 +74,10 @@ def callback(request: HttpRequest) -> HttpResponse:
         logger.warning("[AUTH][MICROSOFT] `%s` attempts to register!!", email)
         return render_error(request, email)
 
-    user = get_or_create_user(email, username)
+    try:
+        user = get_or_create_user(email, username)
+    except LoginRefused as refusal:
+        return _render_page(request, email=email, description=refusal.detail)
     login(request, user)
     tokens = get_tokens_for_user(user)
     return _render_page(
@@ -85,7 +89,7 @@ def callback(request: HttpRequest) -> HttpResponse:
     )
 
 
-def get_or_create_user(email: str, username: str) -> User:
+def get_or_create_user(email: str, username: str) -> AbstractBaseUser:
     """The user linked to this Microsoft account (keyed by its e-mail), created on first login."""
     return get_or_create_social_user("microsoft", email, email=email, username=username)
 

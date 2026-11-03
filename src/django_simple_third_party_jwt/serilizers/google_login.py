@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
-from django.contrib.auth.models import User
+from django.contrib.auth.base_user import AbstractBaseUser
 from google.auth import exceptions as google_exceptions
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
@@ -57,7 +57,7 @@ class GoogleLoginSerializer(serializers.Serializer):
         logger.warning("[AUTH][GOOGLE] %s", detail)
         raise InvalidCredentialError(detail) from None
 
-    def create(self, validated_data: Dict[str, Any]) -> User:
+    def create(self, validated_data: Dict[str, Any]) -> AbstractBaseUser:
         idinfo = self.verify_token(validated_data.get("credential"))
         email = idinfo["email"]
 

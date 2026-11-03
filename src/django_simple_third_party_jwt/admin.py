@@ -1,6 +1,16 @@
 from django.contrib import admin
+from django.contrib.auth import get_user_model
 
 from django_simple_third_party_jwt.models import SocialAccount
+from django_simple_third_party_jwt.utils.accounts import has_field
+
+_user_model = get_user_model()
+# The user model's own login-name and e-mail fields (AUTH_USER_MODEL may call them anything).
+_user_search_fields = [
+    f"user__{name}"
+    for name in dict.fromkeys([_user_model.USERNAME_FIELD, _user_model.get_email_field_name()])
+    if has_field(_user_model, name)
+]
 
 
 @admin.register(SocialAccount)
@@ -12,11 +22,11 @@ class SocialAccountAdmin(admin.ModelAdmin):
     list_editable = ("provider",)
     list_filter = ("provider",)
     list_per_page = 25
-    search_fields = ["user__username", "user__email", "provider", "unique_id"]
+    search_fields = _user_search_fields + ["provider", "unique_id"]
     # 只讀字段（在編輯頁面中不可修改）
     readonly_fields = ("unique_id",)
 
     @admin.display(description="使用者Email")
     def user_email(self, obj: SocialAccount) -> str:
         """顯示使用者的 Email"""
-        return obj.user.email
+        return getattr(obj.user, obj.user.get_email_field_name(), "")
