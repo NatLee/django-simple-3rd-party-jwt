@@ -40,12 +40,15 @@ No passwords to store, no OAuth plumbing to write.
   Microsoft, Microsoft sends it back to `/api/auth/microsoft/callback` with a code, and your
   site swaps that code for Microsoft tokens (with your client ID and secret). The callback
   answers with a small page that saves the JWTs in `localStorage` and goes on to `LOGIN_REDIRECT_URL`.
-- **Both** let in only e-mail domains listed in `VALID_REGISTER_DOMAINS`, find or create
-  the Django user, and hand out a Simple JWT access/refresh pair.
+- **Both** let in only verified e-mail addresses on the domains listed in
+  `VALID_REGISTER_DOMAINS`, find or create the Django user, and hand out a Simple JWT
+  access/refresh pair.
 
 Each Google or Microsoft account is linked to a Django user through a small
-`SocialAccount` table (`social_account` in the database, also in the Django admin),
-so a returning user gets the same account.
+`SocialAccount` table (`social_account` in the database, also in the Django admin), keyed
+by the account's fixed ID (Google's `sub`, Microsoft's tenant and object IDs), so a
+returning user gets the same account even after changing their name or address. Any user
+model works: the app uses your `AUTH_USER_MODEL`.
 
 ## Install
 
@@ -76,6 +79,7 @@ The buttons only work with credentials of your own. For local testing you need:
   `http://localhost:8000` as *Authorized JavaScript origins*.
 - **Microsoft**: an Azure app registration with the redirect URI
   `http://localhost:8000/api/auth/microsoft/callback` (platform *Web*), and a client secret.
+  For work and school accounts, also switch on the optional claims `email` and `xms_edov`.
 
 Click-by-click instructions are in [Getting credentials](#getting-credentials). The `api` in
 the redirect URI is the `JWT_3RD_PREFIX` from the next step; the two have to agree.
@@ -133,8 +137,10 @@ LOGIN_REDIRECT_URL = "/login/"
 export SOCIAL_MICROSOFT_CLIENT_SECRET="<your-client-secret-value>"   # before runserver
 ```
 
-Left one provider out? The app logs a start-up warning about that provider's demo
-credentials, which you can ignore as long as you don't link to its routes.
+Left one provider out? Without its settings, Google falls back to a shared demo client and
+logs a warning. Microsoft has no demo app, so `manage.py check` warns
+(`django_simple_third_party_jwt.W002`) and its sign-in link shows a "not set up" page. If
+you only use Google, add `"django_simple_third_party_jwt.W002"` to `SILENCED_SYSTEM_CHECKS`.
 
 ### 3. URLs
 
@@ -301,15 +307,49 @@ If the domain is not allowed, it says so in red and stores nothing.
 | The Google endpoint answers `401` "Google has not verified this e-mail address." | The Google account's address is not verified. The user has to verify it with Google first. |
 | Microsoft shows an `AADSTS50011` redirect URI error | Register exactly the redirect URI the error shows (usually `http://localhost:8000/api/auth/microsoft/callback`), and browse the site at that host. |
 | The callback page says "Something went wrong while signing in with Microsoft. Please try again." | The server log has Microsoft's reason. `invalid_client` with `AADSTS7000215` means `SOCIAL_MICROSOFT_CLIENT_SECRET` holds the secret's ID instead of its value, or an expired secret. (Up to 0.3.2 the log only says `'access_token'`.) |
-| The callback page says "Sorry, this account is not allowed to sign in here." | The account's domain is not in `VALID_REGISTER_DOMAINS`, or its name is not an e-mail address. |
+| The callback page says "Sorry, this account is not allowed to sign in here." | The address's domain is not in `VALID_REGISTER_DOMAINS`. |
+| The callback page says "Sorry, Microsoft has not confirmed an e-mail address for this account." | A work or school account: switch on the optional claims `email` and `xms_edov` (see [Getting credentials](#getting-credentials)). Or the account has no e-mail address, such as one that signs in with a phone number. |
+| Warning `django_simple_third_party_jwt.W002` at start-up, or the page "Microsoft sign-in is not set up on this site." | Set `SOCIAL_MICROSOFT_CLIENT_ID` and `SOCIAL_MICROSOFT_CLIENT_SECRET`. Only using Google? Silence the warning with `SILENCED_SYSTEM_CHECKS`. |
+| The Google endpoint answers `401` "Another account already uses this e-mail address." (or the Microsoft page says so) | Your user model logs in with the e-mail address, and a user who did not sign in through Google or Microsoft already has it. The app does not merge the two. |
 
 ## Upgrading
 
 ### From 0.4.0
 
+Check these first if you use Microsoft sign-in:
+
+- **Microsoft accounts are identified by their tenant and object IDs** (`tid` and `oid`), not by
+  `preferred_username`, which the account's owner can change. Existing users keep their
+  accounts: on their first sign-in after the upgrade, the app finds their record through the
+  verified e-mail address (the old records were keyed by that address) and keys it by the IDs
+  from then on. A user whose verified address differs from their old `preferred_username` gets
+  a new account instead; you can move their `SocialAccount` row in the admin.
+- **The allowed domain is checked on an e-mail address Microsoft vouches for.** Personal
+  accounts work as they are. For work and school accounts, switch on the optional claims
+  `email` and `xms_edov` (*Token configuration* in the app registration); without them those
+  sign-ins are refused with "Sorry, Microsoft has not confirmed an e-mail address for this
+  account.".
+- **The sign-in asks for the `email` permission** as well, so users may see a consent prompt
+  once.
+- **There are no Microsoft demo credentials any more** (the demo app's secret was public). Set
+  `SOCIAL_MICROSOFT_CLIENT_ID` and `SOCIAL_MICROSOFT_CLIENT_SECRET`; `manage.py check`
+  warns (`W002`) until you do.
+
+Also in this release:
+
 - The Google endpoint answers `401` with the reason, instead of `500` "Something went wrong :(", when Google does not accept the credential. If your frontend looks for a 500, look for the 401 (or just `!response.ok`).
 - Google accounts whose address Google has not verified (`email_verified`) are refused with `401` "Google has not verified this e-mail address.".
 - `JWT_3RD_PREFIX` is optional now, with the default `"api"`. Nothing to change if you set it.
+- Custom user models (`AUTH_USER_MODEL`) work. A new user's login name is the e-mail's local
+  part, or the whole address if your model logs in with it. Projects on Django's built-in
+  `User` see no change and get no new migration.
+- The Microsoft callback no longer fetches the Microsoft Graph profile (nothing used it), and
+  `django_simple_third_party_jwt.views.microsoft.utils` is gone:
+
+  | 0.4.0 import | Now |
+  |---|---|
+  | `views.microsoft.utils.get_user`, `views.microsoft.utils.graph_url` | Removed. Call Microsoft Graph yourself with a token from `msal_helpers.get_token()`. |
+  | `views.microsoft.utils.callback_url` | `views.microsoft.msal_helpers.callback_url` |
 
 ### From 0.3.2 or earlier
 
@@ -351,7 +391,7 @@ package (most projects only include its URLs, which did not change), use the new
 | `django_simple_third_party_jwt.serializers.GoogleLoginSerializer` | `django_simple_third_party_jwt.serilizers.GoogleLoginSerializer` |
 | `django_simple_third_party_jwt.serializers.UserSerializer` | Removed. Write a `ModelSerializer` for your user model. |
 | `get_msal_app`, `get_sign_in_flow`, `get_token_from_code`, `get_token`, `load_cache`, `save_cache`, `remove_user_and_token`, `settings` and `callback_url` from `django_simple_third_party_jwt.views.microsoft` | The same names in `django_simple_third_party_jwt.views.microsoft.msal_helpers` |
-| `get_user` and `graph_url` from `django_simple_third_party_jwt.views.microsoft` | The same names in `django_simple_third_party_jwt.views.microsoft.utils` |
+| `get_user` and `graph_url` from `django_simple_third_party_jwt.views.microsoft` | Removed (see [From 0.4.0](#from-040)). |
 | `initialize_context` from `django_simple_third_party_jwt.views.microsoft` | Removed. |
 | `sign_in`, `sign_out` and `callback` from `django_simple_third_party_jwt.views.microsoft` | Unchanged. |
 
@@ -361,9 +401,9 @@ package (most projects only include its URLs, which did not change), use the new
 |---|---|---|---|
 | `JWT_3RD_PREFIX` | No | `"api"` | URL prefix for every route: `/<prefix>/auth/...`. A `/` at either end is ignored (`"/api/"` means `"api"`), and `""` puts the routes at `/auth/...`. Also part of the Microsoft redirect URI. |
 | `SOCIAL_GOOGLE_CLIENT_ID` | For Google | a shared demo client, with a warning | Your Google OAuth client ID. |
-| `SOCIAL_MICROSOFT_CLIENT_ID` | For Microsoft | a shared demo app, with a warning | The *Application (client) ID* of your Azure app. |
-| `SOCIAL_MICROSOFT_CLIENT_SECRET` | For Microsoft | a shared demo app, with a warning | A client secret *value* of that app. Load it from the environment. |
-| `VALID_REGISTER_DOMAINS` | No | `["gmail.com", "outlook.com", "hotmail.com", "live.com"]` | Only addresses on these domains can sign in, new and returning users alike. Google: the token's `email`. Microsoft: `preferred_username`. |
+| `SOCIAL_MICROSOFT_CLIENT_ID` | For Microsoft | none: `manage.py check` warns (`W002`) | The *Application (client) ID* of your Azure app. |
+| `SOCIAL_MICROSOFT_CLIENT_SECRET` | For Microsoft | none: `manage.py check` warns (`W002`) | A client secret *value* of that app. Load it from the environment. |
+| `VALID_REGISTER_DOMAINS` | No | `["gmail.com", "outlook.com", "hotmail.com", "live.com"]` | Only addresses on these domains can sign in, new and returning users alike. Google: the token's `email`, which Google must have verified. Microsoft: the `email` claim, for personal accounts or with `xms_edov` = true. |
 | `LOGIN_REDIRECT_URL` | No | Django's default, `/accounts/profile/` | Where the Microsoft callback page sends the browser. |
 | `MICROSOFT_JWT_REDIRECT_ACCESS_TOKEN_KEY` | No | `"access_token"` | `localStorage` key the Microsoft callback page stores the access token under. |
 | `MICROSOFT_JWT_REDIRECT_REFRESH_TOKEN_KEY` | No | `"refresh_token"` | Same, for the refresh token. |
@@ -372,16 +412,18 @@ Good to know:
 
 - The app reads these settings once, at start-up. Changing them at runtime (for example
   with `override_settings` in your tests) does not reach it.
-- Don't ship with the demo credentials. They belong to the package author, are public,
-  and are meant for trying things out locally. The app logs a warning at start-up while
-  you use them.
+- Don't ship with the demo Google client ID. It belongs to the package author, is public,
+  and is meant for trying things out locally. The app logs a warning at start-up while
+  you use it. Microsoft has no demo app.
 - Token lifetimes and signing are Simple JWT's job: set them in
   [`SIMPLE_JWT`](https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html).
 - Frontend on another origin? Add [django-cors-headers](https://github.com/adamchainz/django-cors-headers).
 - Behind a reverse proxy, make sure `request.build_absolute_uri()` sees the public scheme
   and host (`SECURE_PROXY_SSL_HEADER`, `USE_X_FORWARDED_HOST`). The Microsoft redirect URI
   is built from it.
-- The app links accounts to Django's built-in `User` model.
+- The app works with your `AUTH_USER_MODEL`. A new user's login name is the e-mail's local
+  part (or a random one if that is taken), or the whole address if your model logs in with
+  it. In that case an address another user already has refuses the sign-in.
 
 ## Getting credentials
 
@@ -415,8 +457,12 @@ More in Google's guide: [Get your Google API client ID](https://developers.googl
 5. **Certificates & secrets → New client secret**. Copy the **Value** column right away
    (Azure shows it once; the *Secret ID* is something else) and put it in the
    `SOCIAL_MICROSOFT_CLIENT_SECRET` environment variable.
-6. **API permissions** already lists Microsoft Graph `User.Read`. That is the only
-   permission the app asks for.
+6. **API permissions** already lists Microsoft Graph `User.Read`. The sign-in also asks for
+   `email` (*View users' email address*), so users may see a consent prompt for it once.
+7. Work and school accounts only: **Token configuration → Add optional claim → ID**, tick
+   `email` and `xms_edov`. The app checks the allowed domain on that address, and only
+   when `xms_edov` says the domain's owner is verified. Personal Microsoft accounts need
+   nothing here.
 
 </details>
 
@@ -440,7 +486,7 @@ Open <http://localhost:8000/api/__hidden_dev_dashboard/>. Other pages:
 
 ![The example's dev dashboard](https://raw.githubusercontent.com/NatLee/django-simple-3rd-party-jwt/main/docs/images/example-dashboard.png)
 
-The example uses the shared demo credentials unless you export your own:
+Google uses the shared demo client unless you export your own; Microsoft needs your own:
 
 ```bash
 export SOCIAL_GOOGLE_CLIENT_ID="<your-client-id>.apps.googleusercontent.com"
