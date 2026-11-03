@@ -1,0 +1,175 @@
+<!doctype html>
+<!--
+  "What goes where" picture for the README's quick start. Render the light and dark versions
+  (#dark picks the dark theme) with a Chromium-based browser, e.g.
+    msedge --headless=new --hide-scrollbars --force-device-scale-factor=2 --window-size=960,496
+           --default-background-color=00000000 --virtual-time-budget=5000
+           --screenshot=setup-map-dark.png "file:///…/setup-map.html#dark"
+  then shrink the PNGs, e.g. magick setup-map-dark.png -strip -dither None -colors 256 setup-map-dark.png
+  It shows the README's quick start for a site on http://localhost:8000 with JWT_3RD_PREFIX = "api":
+  the routes come from urls.py, the redirect URI from views/microsoft/msal_helpers.py.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Setup map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=block" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f6f8fa; --ink: #1f2328; --muted: #59636e; --line: #d1d9e0; --card: #ffffff;
+    --blue: #0969da; --green: #1a7f37; --purple: #8250df; --orange: #bc4c00; --pfx-bg: rgba(188,76,0,.10);
+    --shadow: 0 1px 2px rgba(31,35,40,.06), 0 6px 18px rgba(31,35,40,.06); --wire: #afb8c1;
+  }
+  .dark {
+    --bg: #0d1117; --bg2: #151b23; --ink: #f0f6fc; --muted: #9198a1; --line: #3d444d; --card: #151b23;
+    --blue: #4493f8; --green: #3fb950; --purple: #ab7df8; --orange: #f0883e; --pfx-bg: rgba(240,136,62,.16);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); --wire: #656c76;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; }
+  body { width: 960px; height: 496px; font-family: Inter, "Segoe UI", sans-serif; color: var(--ink); }
+  .frame { position: relative; width: 960px; height: 496px; border-radius: 22px; overflow: hidden;
+           border: 1px solid var(--line); background: var(--bg); }
+  .col { position: absolute; top: 20px; font-size: 11px; font-weight: 700; letter-spacing: .12em;
+         text-transform: uppercase; color: var(--muted); }
+  .card { position: absolute; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+          box-shadow: var(--shadow); overflow: hidden; }
+  .card .t { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line);
+             background: var(--bg2); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+  .card .t i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .card .t .file { font-family: "JetBrains Mono", Consolas, monospace; font-size: 12.5px; font-weight: 600; }
+  .card .t span.muted { font-weight: 500; }
+  .card .b { padding: 9px 12px 10px; }
+  pre, .m { font-family: "JetBrains Mono", Consolas, monospace; font-size: 12px; line-height: 1.6; margin: 0; white-space: pre; }
+  .muted { color: var(--muted); }
+  .f { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .f + .m { margin-top: 1px; }
+  .out { margin-top: 7px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .out code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 11.5px; color: var(--ink); }
+  .pfx { color: var(--orange); background: var(--pfx-bg); border-radius: 4px; padding: 0 2px; font-weight: 600; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .g { background: var(--blue); } .ms { background: var(--purple); }
+  .route { display: flex; align-items: center; gap: 8px; }
+  .route .m { line-height: 1.75; }
+  .verb { font-family: "JetBrains Mono", Consolas, monospace; font-size: 10px; font-weight: 600; width: 34px;
+          text-align: center; border-radius: 5px; border: 1px solid var(--line); color: var(--muted); line-height: 1.5; flex: none; }
+  .hl { margin: 0 -12px; padding: 0 12px; background: var(--pfx-bg); }
+  svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .wire { fill: none; stroke: var(--wire); stroke-width: 2; stroke-dasharray: 5 6; }
+  .head { fill: var(--wire); }
+  .match { fill: none; stroke: var(--orange); stroke-width: 2; stroke-dasharray: 5 5; }
+  .tagm { position: absolute; font-size: 11px; font-weight: 700; color: var(--orange); background: var(--bg);
+          padding: 1px 6px; border-radius: 6px; border: 1px solid var(--orange); white-space: nowrap; letter-spacing: .02em; }
+  .legend { position: absolute; left: 358px; bottom: 22px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+</style>
+</head>
+<body>
+<script>if (location.hash === '#dark') document.documentElement.className = 'dark';</script>
+<div class="frame">
+  <div class="col" style="left:30px">Your project</div>
+  <div class="col" style="left:358px">Your site serves</div>
+  <div class="col" style="left:674px">Register at the provider</div>
+
+  <!-- left: the files you edit -->
+  <div class="card" id="settings" style="left:24px; top:44px; width:310px">
+    <div class="t"><span class="file">settings.py</span></div>
+    <div class="b"><pre>INSTALLED_APPS += [
+    "rest_framework",
+    "django_simple_third_party_jwt"]
+<span id="pfxline">JWT_3RD_PREFIX = "<span class="pfx">api</span>"</span>
+<span class="dot g"></span>SOCIAL_GOOGLE_CLIENT_ID = "…"
+<span class="dot ms"></span>SOCIAL_MICROSOFT_CLIENT_ID = "…"
+<span class="dot ms"></span>SOCIAL_MICROSOFT_CLIENT_SECRET = …</pre></div>
+  </div>
+
+  <div class="card" id="urls" style="left:24px; top:248px; width:310px">
+    <div class="t"><span class="file">urls.py</span></div>
+    <div class="b"><pre style="font-size:11.5px"><span id="incl">path("", include(</span>
+  "django_simple_third_party_jwt.urls")),
+path("login/", TemplateView.as_view(
+  template_name="login.html")),</pre></div>
+  </div>
+
+  <div class="card" id="page" style="left:24px; top:392px; width:310px">
+    <div class="t"><span class="file">templates/login.html</span><span class="muted">your login page</span></div>
+    <div class="b" style="font-size:12px; padding-top:7px; padding-bottom:8px"><span class="dot g"></span>Google button&nbsp;&nbsp;<span class="dot ms"></span>link to <span class="m">/<span class="pfx">api</span>/auth/microsoft/signin</span></div>
+  </div>
+
+  <!-- middle: what the site serves -->
+  <div class="card" id="site" style="left:356px; top:44px; width:292px">
+    <div class="t"><i style="background:var(--green)"></i>http://localhost:8000</div>
+    <div class="b">
+      <div class="route"><span class="verb">GET</span><span class="m">/login/</span><span class="muted" style="font-size:11.5px">your page</span></div>
+      <div class="route"><span class="verb">POST</span><span class="m">/<span class="pfx">api</span>/auth/google/token</span></div>
+      <div class="route"><span class="verb">POST</span><span class="m">/<span class="pfx">api</span>/auth/google/token/session</span></div>
+      <div class="route"><span class="verb">GET</span><span class="m">/<span class="pfx">api</span>/auth/microsoft/signin</span></div>
+      <div class="route hl" id="cb"><span class="verb">GET</span><span class="m">/<span class="pfx">api</span>/auth/microsoft/callback</span></div>
+      <div class="route"><span class="verb">GET</span><span class="m">/<span class="pfx">api</span>/auth/microsoft/signout</span></div>
+    </div>
+  </div>
+
+  <div class="card" id="jwt" style="left:356px; top:264px; width:292px">
+    <div class="t"><i style="background:var(--green)"></i>After a login<span class="muted">a Simple JWT pair</span></div>
+    <div class="b">
+      <div class="m"><span class="muted">access </span> eyJhbGciOiJIUzI1NiIs…</div>
+      <div class="m"><span class="muted">refresh</span> eyJhbGciOiJIUzI1NiIs…</div>
+      <div class="out">your API: <code>Authorization: Bearer &lt;access&gt;</code></div>
+    </div>
+  </div>
+
+  <!-- right: the provider consoles -->
+  <div class="card" id="google" style="left:672px; top:44px; width:264px">
+    <div class="t"><i style="background:var(--blue)"></i>Google Cloud console</div>
+    <div class="b">
+      <div class="f">OAuth client ID, type Web application</div>
+      <div class="f" style="margin-top:6px">Authorized JavaScript origins</div>
+      <div class="m" id="origin">http://localhost<br>http://localhost:8000</div>
+      <div class="out"><span class="dot g"></span>Client ID → <code>SOCIAL_GOOGLE_CLIENT_ID</code></div>
+    </div>
+  </div>
+
+  <div class="card" id="azure" style="left:672px; top:216px; width:264px">
+    <div class="t"><i style="background:var(--purple)"></i>Azure: App registration</div>
+    <div class="b">
+      <div class="f">Redirect URI, platform Web</div>
+      <div class="m" id="redirect">http://localhost:8000<br>/<span class="pfx">api</span>/auth/microsoft/callback</div>
+      <div class="out"><span class="dot ms"></span>Application (client) ID →</div>
+      <div class="out" style="margin-top:1px; padding-left:13px"><code>SOCIAL_MICROSOFT_CLIENT_ID</code></div>
+      <div class="out"><span class="dot ms"></span>client secret <b style="color:var(--ink);font-weight:600">Value</b> →</div>
+      <div class="out" style="margin-top:1px; padding-left:13px"><code>SOCIAL_MICROSOFT_CLIENT_SECRET</code></div>
+    </div>
+  </div>
+
+  <svg id="wires" width="960" height="496"></svg>
+  <div class="legend"><span class="pfx">api</span> comes from <code style="font-family:'JetBrains Mono',Consolas,monospace">JWT_3RD_PREFIX</code>; the orange lines must match exactly</div>
+</div>
+<script>
+// Draw the connectors from the boxes' real positions, so the layout can change freely.
+const box = id => { const r = document.getElementById(id).getBoundingClientRect(); return r; };
+const svg = document.getElementById("wires");
+const ns = "http://www.w3.org/2000/svg";
+const path = (d, cls) => { const p = document.createElementNS(ns, "path"); p.setAttribute("d", d); p.setAttribute("class", cls); svg.appendChild(p); };
+const tag = (x, y, text) => document.querySelector(".frame").insertAdjacentHTML("beforeend",
+  `<div class="tagm" style="left:${x}px; top:${y}px; transform:translate(-50%,-50%)">${text}</div>`);
+document.fonts.ready.then(() => {
+  const s = box("settings"), u = box("urls"), site = box("site"), cb = box("cb"), g = box("google"),
+        o = box("origin"), a = box("azure"), rd = box("redirect"), pg = box("page");
+  // settings + urls -> routes
+  const pl = box("pfxline"), inc = box("incl");
+  const ys = pl.top + pl.height / 2, yu = inc.top + inc.height / 2, yr = site.top + 130;
+  path(`M${s.right + 2} ${ys} C ${s.right + 18} ${ys}, ${site.left - 18} ${yr - 10}, ${site.left - 8} ${yr - 10}`, "wire");
+  path(`M${site.left - 2} ${yr - 10} l-8 -5 v10 z`, "head");
+  path(`M${u.right + 2} ${yu} C ${u.right + 18} ${yu}, ${site.left - 18} ${yr + 14}, ${site.left - 8} ${yr + 14}`, "wire");
+  path(`M${site.left - 2} ${yr + 14} l-8 -5 v10 z`, "head");
+  // callback route <-> Azure redirect URI
+  const yc = cb.top + cb.height / 2, ya = rd.top + rd.height / 2;
+  path(`M${site.right} ${yc} C ${site.right + 18} ${yc}, ${a.left - 18} ${ya}, ${a.left} ${ya}`, "match");
+  // site origin <-> Google origins
+  const yo = site.top + 17, yg = o.top + o.height * 0.75;
+  path(`M${site.right} ${yo} C ${site.right + 18} ${yo}, ${g.left - 18} ${yg}, ${g.left} ${yg}`, "match");
+  document.title = "Setup map ready";
+});
+</script>
+</body>
+</html>
