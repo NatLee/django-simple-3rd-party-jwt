@@ -1,109 +1,81 @@
-import uuid
-from django.contrib.auth.models import User
-from rest_framework import serializers
-from google.oauth2 import id_token
-from google.auth.transport import requests
-
-from django_simple_third_party_jwt import settings
-from django_simple_third_party_jwt.models import SocialAccount
-
-from django_simple_third_party_jwt.exception import InvalidEmailError
+from __future__ import annotations
 
 import logging
+from typing import Any, Dict
+
+from django.contrib.auth.models import User
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
+from rest_framework import serializers
+
+from django_simple_third_party_jwt import settings
+from django_simple_third_party_jwt.exception import InvalidEmailError
+from django_simple_third_party_jwt.utils.accounts import get_or_create_social_user, split_email
 
 logger = logging.getLogger(__name__)
 
+GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
+
+
 class GoogleLoginSerializer(serializers.Serializer):
-    # Google login
-    # 用於接收Google返回的憑證
+    """Turns the ID token that Google Sign-In gives the browser into a Django user.
+
+    `save()` returns the user linked to the Google account, creating it on first login.
+    It raises ValueError when Google's token does not check out and InvalidEmailError
+    when the address is outside VALID_REGISTER_DOMAINS.
+    """
+
+    # 用於接收 Google 返回的憑證（JWT 格式的 ID token）
     credential = serializers.CharField(required=True)
 
-    def verify_token(self, credential):
-        """
-        驗證Google返回的id_token
-        credential: JWT格式的字符串
-        """
-        logger.debug(f"Verify {credential[:50]}...")
-        # 使用Google提供的方法驗證token
+    def verify_token(self, credential: str) -> Dict[str, Any]:
+        """Check the ID token's signature, expiry, issuer and audience; return its claims."""
+        logger.debug("Verify %s...", credential[:50])
+        # 使用 Google 提供的方法驗證 token（會向 Google 取得公鑰）
         idinfo = id_token.verify_oauth2_token(
-            credential, requests.Request(), settings.SOCIAL_GOOGLE_CLIENT_ID
+            credential, google_requests.Request(), settings.SOCIAL_GOOGLE_CLIENT_ID
         )
-        # 驗證token的發行者
-        if idinfo["iss"] not in [
-            "accounts.google.com",
-            "https://accounts.google.com",
-        ]:
+        if idinfo["iss"] not in GOOGLE_ISSUERS:
             logger.error("Wrong issuer")
             raise ValueError("Wrong issuer.")
-        # 驗證token的受眾
-        if idinfo["aud"] not in [settings.SOCIAL_GOOGLE_CLIENT_ID]:
+        if idinfo["aud"] != settings.SOCIAL_GOOGLE_CLIENT_ID:
             logger.error("Could not verify audience")
             raise ValueError("Could not verify audience.")
-        # 驗證成功
         logger.info("successfully verified")
         return idinfo
 
-    def create(self, validated_data):
+    def create(self, validated_data: Dict[str, Any]) -> User:
         idinfo = self.verify_token(validated_data.get("credential"))
         if not idinfo:
             raise ValueError("Incorrect Credentials")
 
-        # 從idinfo中提取email
         email = idinfo["email"]
-        username, domain = email.split("@")
+        username, domain = split_email(email)
 
-        # 檢查email域名是否在允許的列表中
+        # 檢查 email 網域是否在允許的列表中
         if domain not in settings.VALID_REGISTER_DOMAINS:
-            logger.warning(f"[AUTH][GOOGLE] `{email}` attempts to register!!")
+            logger.warning("[AUTH][GOOGLE] `%s` attempts to register!!", email)
             raise InvalidEmailError
 
-        # 首先檢查是否存在對應的 Google SocialAccount
-        try:
-            social_account = SocialAccount.objects.get(provider='google', unique_id=idinfo["sub"])
-            user = social_account.user
-            logger.debug(f"[AUTH][GOOGLE] Existing user logged in: [{user.username}] - [{email}]")
-        except SocialAccount.DoesNotExist:
-            # 如果不存在，創建新的 User 和 SocialAccount
-            # 如果username已存在，則使用uuid生成一個新的username
-            if User.objects.filter(username=username).exists():
-                logger.debug(f"[AUTH][GOOGLE] Existing username: [{username}]")
-                username = str(uuid.uuid4())
-                logger.debug(f"[AUTH][GOOGLE] Creating new username: [{username}]")
-            
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                first_name=idinfo.get("given_name", ""),
-                last_name=idinfo.get("family_name", ""),
-            )
-            SocialAccount.objects.create(
-                user=user,
-                provider='google',
-                unique_id=idinfo["sub"]
-            )
-            logger.debug(f"[AUTH][GOOGLE] Created new user: [{username}] - [{email}]")
-
-        return user
+        # Google 帳號用 sub（Google 給每個帳號的固定 ID）對應到使用者
+        return get_or_create_social_user(
+            "google",
+            idinfo["sub"],
+            email=email,
+            username=username,
+            first_name=idinfo.get("given_name", ""),
+            last_name=idinfo.get("family_name", ""),
+        )
 
 
-# 註解：以下是一些可能的範例數據
-
-# Google返回的id_token示例（JWT格式）：
-# credential = "eyABC.ABC.signature"
-
-# 解碼後的idinfo示例：
-# idinfo = {
+# 解碼後的 idinfo 範例：
+# {
 #     "iss": "https://accounts.google.com",
-#     "azp": "123456789-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com",
 #     "aud": "123456789-abcdefghijklmnopqrstuvwxyz012345.apps.googleusercontent.com",
 #     "sub": "123456789012345678901",
 #     "email": "john.doe@example.com",
 #     "email_verified": True,
-#     "name": "John Doe",
 #     "given_name": "John",
 #     "family_name": "Doe",
-#     "locale": "en",
-#     "iat": 1623123456,
-#     "exp": 1623127056
+#     ...
 # }
-

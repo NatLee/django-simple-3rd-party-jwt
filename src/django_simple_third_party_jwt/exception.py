@@ -1,3 +1,2 @@
-
 class InvalidEmailError(Exception):
-    pass
+    """The e-mail's domain is not in VALID_REGISTER_DOMAINS."""
