@@ -222,9 +222,17 @@ class MicrosoftLoginTests(TestCase):
 
     def callback(self, email="carol@gmail.com"):
         token_result = {"access_token": "graph-token", "id_token_claims": {"preferred_username": email}}
-        with mock.patch(f"{MICROSOFT_AUTH}.get_token_from_code", return_value=token_result), \
-                mock.patch(f"{MICROSOFT_AUTH}.get_user", return_value={"displayName": "Carol"}):
+        with mock.patch(f"{MICROSOFT_AUTH}.get_token_from_code", return_value=token_result):
             return self.client.get("/api/auth/microsoft/callback", {"code": "c", "state": "s"})
+
+    def test_callback_does_not_call_microsoft_graph(self):
+        """It used to fetch the Graph profile and throw it away (removed: the user's decision,
+        2026-11-04); a Graph outage then made the login a 500."""
+        with mock.patch("requests.sessions.Session.request") as http:
+            response = self.callback()
+
+        self.assertEqual(response.status_code, 200)
+        http.assert_not_called()
 
     def test_callback_creates_user_logs_in_and_hands_over_tokens(self):
         response = self.callback()
@@ -311,15 +319,15 @@ class MicrosoftLoginTests(TestCase):
             "error": "invalid_client",
             "error_description": "AADSTS7000215: Invalid client secret provided.",
         }
-        with mock.patch(f"{MICROSOFT_AUTH}.get_token_from_code", return_value=refusal),                 mock.patch(f"{MICROSOFT_AUTH}.get_user") as get_user,                 self.assertLogs(MICROSOFT_AUTH, "ERROR") as logs:
-            response = self.client.get("/api/auth/microsoft/callback", {"code": "c"})
+        with mock.patch(f"{MICROSOFT_AUTH}.get_token_from_code", return_value=refusal):
+            with self.assertLogs(MICROSOFT_AUTH, "ERROR") as logs:
+                response = self.client.get("/api/auth/microsoft/callback", {"code": "c"})
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["access_token"], "")
         self.assertEqual(response.context["description"], "Something went wrong while signing in with Microsoft. Please try again.")
         self.assertIn("invalid_client", logs.output[0])
         self.assertIn("AADSTS7000215: Invalid client secret provided.", logs.output[0])
-        get_user.assert_not_called()
         self.assertFalse(User.objects.exists())
 
     def test_callback_page_shows_the_message_without_javascript_too(self):

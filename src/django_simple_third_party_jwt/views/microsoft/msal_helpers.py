@@ -18,7 +18,7 @@ settings = {
 
 # Compatibility with 0.3.x, kept in this one place; remove both in 1.0:
 # - `callback_url`: the callback path rebuilt from JWT_3RD_PREFIX, relative to the site root.
-#   Also importable from views.microsoft.utils, its 0.3.0 home. The package itself asks the
+#   (0.3.0 had it in views.microsoft; the README lists the old import paths.) The package itself asks the
 #   URLconf instead (sign_in reverses "microsoft-callback"), which also covers a site served
 #   under a sub-path or an app included somewhere other than the root.
 # - `get_sign_in_flow(root_url)`: the 0.3.x call, which adds `callback_url` to the site root.

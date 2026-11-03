@@ -22,7 +22,6 @@ from django_simple_third_party_jwt.views.microsoft.msal_helpers import (
     get_token_from_code,
     remove_user_and_token,
 )
-from django_simple_third_party_jwt.views.microsoft.utils import get_user
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +54,10 @@ def callback(request: HttpRequest) -> HttpResponse:
                 result["error"], result.get("error_description", ""),
             )
             return render_error(request, "")
-        access_token = result["access_token"]
         email = result["id_token_claims"]["preferred_username"]
     except Exception as e:
         logger.error("[AUTH][MICROSOFT] %s", e)
         return render_error(request, "")
-
-    # The Graph profile is fetched but not stored (yet).
-    get_user(access_token)
 
     try:
         username, domain = split_email(email)
